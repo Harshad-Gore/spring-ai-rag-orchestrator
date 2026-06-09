@@ -1,7 +1,7 @@
 # Spring AI RAG Orchestrator
 
 ## Overview
-The Spring AI RAG Orchestrator is a robust middleware designed to facilitate Retrieval-Augmented Generation (RAG) at scale. Built on Java 25 and Spring Boot, this system provides a secure, high-throughput pipeline for document ingestion, semantic chunking, and AI-driven data querying. 
+The Spring AI RAG Orchestrator is a robust middleware designed to facilitate Retrieval-Augmented Generation (RAG) at scale. Built on Java and Spring Boot, this system provides a secure, high-throughput pipeline for document ingestion, semantic chunking, and AI-driven data querying. 
 
 By routing inference through high-speed API and utilizing Supabase (PostgreSQL + pgvector) for high-dimensional similarity search, the architecture guarantees strict source grounding and rapid response times for enterprise document intelligence.
 
