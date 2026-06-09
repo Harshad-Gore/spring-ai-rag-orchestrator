@@ -1,0 +1,17 @@
+# ignore files and directories
+.github
+
+# custom vscode settings
+.vscode
+
+# environment variables
+.env
+
+# artifacts
+node_modules
+dist
+target
+build
+coverage
+
+.DS_Store
