@@ -1,0 +1,63 @@
+{
+  "properties": [
+    {
+      "name": "spring.flyway.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether the application should run Flyway migrations during startup.",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.flyway.locations",
+      "type": "java.lang.String",
+      "description": "Comma-separated Flyway migration locations.",
+      "defaultValue": "classpath:db/migration"
+    },
+    {
+      "name": "spring.flyway.baseline-on-migrate",
+      "type": "java.lang.Boolean",
+      "description": "Whether Flyway should baseline an existing non-empty schema before running migrations.",
+      "defaultValue": false
+    },
+    {
+      "name": "app.frontend.origins",
+      "type": "java.lang.String",
+      "description": "Comma-separated frontend origins allowed by CORS.",
+      "defaultValue": "http://localhost:5173,http://127.0.0.1:5173"
+    },
+    {
+      "name": "app.auth.issuer",
+      "type": "java.lang.String",
+      "description": "Issuer claim used in application auth tokens.",
+      "defaultValue": "spring-ai-rag-orchestrator"
+    },
+    {
+      "name": "app.auth.jwt-secret",
+      "type": "java.lang.String",
+      "description": "Secret used to sign application auth tokens."
+    },
+    {
+      "name": "app.auth.token-ttl",
+      "type": "java.time.Duration",
+      "description": "Lifetime of issued auth tokens.",
+      "defaultValue": "PT2H"
+    },
+    {
+      "name": "app.auth.cookie-name",
+      "type": "java.lang.String",
+      "description": "Name of the HttpOnly auth cookie.",
+      "defaultValue": "auth_token"
+    },
+    {
+      "name": "app.auth.cookie-secure",
+      "type": "java.lang.Boolean",
+      "description": "Whether the auth cookie should only be sent over HTTPS.",
+      "defaultValue": false
+    },
+    {
+      "name": "app.auth.cookie-same-site",
+      "type": "java.lang.String",
+      "description": "SameSite policy for the auth cookie.",
+      "defaultValue": "Lax"
+    }
+  ]
+}
