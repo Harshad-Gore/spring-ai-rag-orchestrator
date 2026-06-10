@@ -34,6 +34,7 @@ import tools.jackson.databind.ObjectMapper;
 	"spring.ai.openai.base-url=http://localhost",
 	"spring.ai.openai.api-key=test",
 	"spring.ai.openai.chat.options.model=test",
+	"app.frontend.origins=http://localhost:5173,https://frontend.example.vercel.app",
 	"app.auth.jwt-secret=test-secret-that-is-long-enough-for-hmac-signing-123456"
 })
 @AutoConfigureMockMvc
@@ -74,6 +75,23 @@ class AuthControllerTests {
 			.andExpect(status().isOk())
 			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "http://localhost:5173"))
 			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+	}
+
+	@Test
+	void corsPreflightAllowsConfiguredVercelOrigin() throws Exception {
+		mockMvc.perform(options("/api/auth/me")
+				.header(HttpHeaders.ORIGIN, "https://frontend.example.vercel.app")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
+			.andExpect(status().isOk())
+			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://frontend.example.vercel.app"))
+			.andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+	}
+
+	@Test
+	void healthEndpointIsPublic() throws Exception {
+		mockMvc.perform(get("/api/health"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.status").value("ok"));
 	}
 
 	@Test

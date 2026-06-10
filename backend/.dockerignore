@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+target/
+build/
+.mvn/timing.properties
+*.log
+*.class
+*.jar
+*.war
+*.ear

@@ -7,7 +7,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class SpringAiRagOrchestratorApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(SpringAiRagOrchestratorApplication.class, args);
+		SpringApplication application = new SpringApplication(SpringAiRagOrchestratorApplication.class);
+		application.addInitializers(new DatabaseUrlInitializer());
+		application.run(args);
 	}
 
 }

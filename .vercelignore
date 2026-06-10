@@ -1,0 +1,14 @@
+backend/
+render.yaml
+DEPLOYMENT.md
+README.md
+
+node_modules/
+dist/
+target/
+build/
+coverage/
+
+.env
+.env.*
+!.env.example
