@@ -8,6 +8,7 @@ import {
   Settings,
 } from 'lucide-react'
 import DashboardNavbar from '../components/dashboard/DashboardNavbar.jsx'
+import UploadPanel from '../components/upload/UploadPanel.jsx'
 import { Button } from '../components/ui/button.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 
@@ -108,29 +109,35 @@ function DashboardPage() {
             </div>
           ) : null}
 
-          <div className="flex min-h-[440px] items-center justify-center p-6 text-center">
-            <div className="flex max-w-sm flex-col items-center gap-3">
-              <div className="flex size-10 items-center justify-center rounded-[10px] border border-[#2d2d2d] text-white">
-                <ViewIcon aria-hidden="true" className="size-5" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-white">
-                  Nothing here yet
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-[#b9c0ca]">
-                  {currentView.description}
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="default"
-                onClick={() => handleViewChange(currentView.nextView)}
-              >
-                {currentView.action}
-                <ChevronRight aria-hidden="true" className="size-4" />
-              </Button>
+          {activeView === 'sources' ? (
+            <div className="p-6">
+              <UploadPanel onUploaded={() => setActiveView('notebook')} />
             </div>
-          </div>
+          ) : (
+            <div className="flex min-h-[440px] items-center justify-center p-6 text-center">
+              <div className="flex max-w-sm flex-col items-center gap-3">
+                <div className="flex size-10 items-center justify-center rounded-[10px] border border-[#2d2d2d] text-white">
+                  <ViewIcon aria-hidden="true" className="size-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-white">
+                    Nothing here yet
+                  </h2>
+                  <p className="mt-1 text-sm leading-6 text-[#b9c0ca]">
+                    {currentView.description}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={() => handleViewChange(currentView.nextView)}
+                >
+                  {currentView.action}
+                  <ChevronRight aria-hidden="true" className="size-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </main>
