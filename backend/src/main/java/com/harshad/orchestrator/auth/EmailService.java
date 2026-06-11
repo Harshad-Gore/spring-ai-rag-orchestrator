@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.thymeleaf.TemplateEngine;
 import org.thymeleaf.context.Context;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.mail.internet.MimeMessage;
 
 @Service
@@ -22,6 +23,12 @@ public class EmailService {
 	@Value("${spring.mail.username}")
 	private String fromEmail;
 
+	@Value("${spring.mail.host}")
+	private String mailHost;
+
+	@Value("${spring.mail.port}")
+	private int mailPort;
+
 	@Value("${app.frontend.url}")
 	private String frontendUrl;
 
@@ -30,51 +37,38 @@ public class EmailService {
 		this.templateEngine = templateEngine;
 	}
 
-	public void sendVerificationEmail(String toEmail, String name, String token, String origin) {
-		try {
-			Context context = new Context();
-			context.setVariable("name", name);
-			String base = (origin != null && !origin.isBlank()) ? origin : frontendUrl;
-			if (base != null && base.endsWith("/")) {
-				base = base.substring(0, base.length() - 1);
-			}
-			String verifyUrl = base + "/verify-email?token=" + token;
-			context.setVariable("url", verifyUrl);
+	@PostConstruct
+	public void logMailConfig() {
+		log.info("Email service initialized: host={}, port={}, from={}", mailHost, mailPort, fromEmail);
+	}
 
-			String htmlContent = templateEngine.process("verify-email", context);
-			sendHtmlEmail(toEmail, "Verify your email address", htmlContent);
-		} catch (Exception e) {
-			log.error("Failed to send verification email to {}", toEmail, e);
-		}
+	public void sendVerificationEmail(String toEmail, String name, String token, String origin) {
+		Context context = new Context();
+		context.setVariable("name", name);
+		String base = resolveBaseUrl(origin);
+		String verifyUrl = base + "/verify-email?token=" + token;
+		context.setVariable("url", verifyUrl);
+
+		String htmlContent = templateEngine.process("verify-email", context);
+		sendHtmlEmail(toEmail, "Verify your email address", htmlContent);
 	}
 
 	public void sendPasswordResetEmail(String toEmail, String name, String token, String origin) {
-		try {
-			Context context = new Context();
-			context.setVariable("name", name);
-			String base = (origin != null && !origin.isBlank()) ? origin : frontendUrl;
-			if (base != null && base.endsWith("/")) {
-				base = base.substring(0, base.length() - 1);
-			}
-			String resetUrl = base + "/reset-password?token=" + token;
-			context.setVariable("url", resetUrl);
+		Context context = new Context();
+		context.setVariable("name", name);
+		String base = resolveBaseUrl(origin);
+		String resetUrl = base + "/reset-password?token=" + token;
+		context.setVariable("url", resetUrl);
 
-			String htmlContent = templateEngine.process("reset-password", context);
-			sendHtmlEmail(toEmail, "Reset your password", htmlContent);
-		} catch (Exception e) {
-			log.error("Failed to send password reset email to {}", toEmail, e);
-		}
+		String htmlContent = templateEngine.process("reset-password", context);
+		sendHtmlEmail(toEmail, "Reset your password", htmlContent);
 	}
 
 	public void sendWelcomeEmail(String toEmail, String name, String origin) {
 		try {
 			Context context = new Context();
 			context.setVariable("name", name);
-			String base = (origin != null && !origin.isBlank()) ? origin : frontendUrl;
-			if (base != null && base.endsWith("/")) {
-				base = base.substring(0, base.length() - 1);
-			}
-			context.setVariable("url", base); // link to dashboard
+			context.setVariable("url", resolveBaseUrl(origin));
 
 			String htmlContent = templateEngine.process("welcome", context);
 			sendHtmlEmail(toEmail, "Welcome to Notebook!", htmlContent);
@@ -95,14 +89,28 @@ public class EmailService {
 		}
 	}
 
-	private void sendHtmlEmail(String to, String subject, String htmlBody) throws Exception {
-		MimeMessage message = mailSender.createMimeMessage();
-		MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-		helper.setFrom(fromEmail);
-		helper.setTo(to);
-		helper.setSubject(subject);
-		helper.setText(htmlBody, true);
-		mailSender.send(message);
-		log.info("Email sent to: {} with subject: {}", to, subject);
+	private String resolveBaseUrl(String origin) {
+		String base = (origin != null && !origin.isBlank()) ? origin : frontendUrl;
+		if (base != null && base.endsWith("/")) {
+			base = base.substring(0, base.length() - 1);
+		}
+		return base;
+	}
+
+	private void sendHtmlEmail(String to, String subject, String htmlBody) {
+		try {
+			MimeMessage message = mailSender.createMimeMessage();
+			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+			helper.setFrom(fromEmail);
+			helper.setTo(to);
+			helper.setSubject(subject);
+			helper.setText(htmlBody, true);
+			mailSender.send(message);
+			log.info("Email sent successfully to: {} with subject: {}", to, subject);
+		} catch (Exception e) {
+			log.error("EMAIL SEND FAILED to: {} | subject: {} | host: {}:{} | from: {} | error: {}",
+				to, subject, mailHost, mailPort, fromEmail, e.getMessage(), e);
+			throw new RuntimeException("Failed to send email to " + to + ": " + e.getMessage(), e);
+		}
 	}
 }

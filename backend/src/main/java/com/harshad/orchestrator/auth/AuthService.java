@@ -5,6 +5,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.Locale;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -13,6 +16,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
+
+	private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
 	private final JwtService jwtService;
 	private final PasswordEncoder passwordEncoder;
@@ -33,7 +38,7 @@ public class AuthService {
 		this.emailService = emailService;
 	}
 
-	@Transactional(noRollbackFor = UnverifiedUserException.class)
+	@Transactional(noRollbackFor = {UnverifiedUserException.class, RuntimeException.class})
 	public AuthResponse signup(SignupRequest request, String origin) {
 		String email = normalizeEmail(request.email());
 		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
@@ -56,13 +61,18 @@ public class AuthService {
 			Instant.now().plus(24, ChronoUnit.HOURS)
 		);
 		userTokenRepository.save(userToken);
-		emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token, origin);
+
+		try {
+			emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token, origin);
+		} catch (Exception e) {
+			log.error("Signup succeeded but email delivery failed for {}: {}", user.getEmail(), e.getMessage());
+		}
 
 		// Don't log them in yet, throw an exception so the frontend knows to show "check email"
 		throw new UnverifiedUserException("UNVERIFIED_ACCOUNT");
 	}
 
-	@Transactional(noRollbackFor = UnverifiedUserException.class)
+	@Transactional(noRollbackFor = {UnverifiedUserException.class, RuntimeException.class})
 	public AuthResponse login(LoginRequest request, String origin) {
 		UserAccount user = userAccountRepository.findByEmailIgnoreCase(normalizeEmail(request.email()))
 			.orElseThrow(() -> new BadCredentialsException("Invalid email or password."));
@@ -78,7 +88,13 @@ public class AuthService {
 				Instant.now().plus(24, ChronoUnit.HOURS)
 			);
 			userTokenRepository.save(userToken);
-			emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token, origin);
+
+			try {
+				emailService.sendVerificationEmail(user.getEmail(), user.getFullName(), token, origin);
+			} catch (Exception e) {
+				log.error("Login re-verify but email delivery failed for {}: {}", user.getEmail(), e.getMessage());
+			}
+
 			throw new UnverifiedUserException("UNVERIFIED_ACCOUNT");
 		}
 
