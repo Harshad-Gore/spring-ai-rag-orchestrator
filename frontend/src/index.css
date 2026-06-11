@@ -39,3 +39,14 @@ body {
 .auth-mode-title {
   animation: auth-mode-enter 160ms ease-out both;
 }
+
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

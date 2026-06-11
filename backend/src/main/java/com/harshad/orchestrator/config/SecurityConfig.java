@@ -37,6 +37,7 @@ public class SecurityConfig {
 			.cors(Customizer.withDefaults())
 			.sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests((authorize) -> authorize
+				.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC, jakarta.servlet.DispatcherType.ERROR).permitAll()
 				.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/health").permitAll()
