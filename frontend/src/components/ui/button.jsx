@@ -27,7 +27,7 @@ export function Button({
     <button
       type={type}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-lg border text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25 disabled:cursor-not-allowed',
+        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border text-sm font-medium transition focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25 disabled:cursor-not-allowed',
         sizes[size] ?? sizes.default,
         variants[variant],
         className,

@@ -14,6 +14,7 @@ function NotebookWorkspace({
   onOpenUpload,
   onRemoveDocument,
   onSendMessage,
+  onRenameNotebook,
 }) {
   const [mobileTab, setMobileTab] = useState('chat')
 
@@ -60,6 +61,7 @@ function NotebookWorkspace({
             onBack={onBack}
             onOpenUpload={onOpenUpload}
             onRemoveDocument={onRemoveDocument}
+            onRenameNotebook={onRenameNotebook}
           />
         </div>
 

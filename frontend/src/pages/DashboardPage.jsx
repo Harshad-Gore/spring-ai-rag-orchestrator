@@ -314,6 +314,7 @@ function DashboardPage() {
             onOpenUpload={() => setShowUploadModal(true)}
             onRemoveDocument={handleRemoveDocument}
             onSendMessage={handleSendMessage}
+            onRenameNotebook={handleRenameNotebook}
           />
 
           {showUploadModal && (

@@ -1,16 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { GalleryVerticalEnd, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from './hooks/useAuth.js'
 import AuthPage from './pages/AuthPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
 
 function AuthLoadingScreen() {
   return (
-    <main className="flex min-h-svh items-center justify-center bg-[#070807] px-6 text-white">
-      <div className="flex items-center gap-3 text-[#dffdee]">
-        <GalleryVerticalEnd aria-hidden="true" className="size-5" />
-        <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-      </div>
+    <main className="flex min-h-svh items-center justify-center bg-[#070807]">
+      <Loader2 aria-hidden="true" className="size-6 animate-spin text-[#dffdee]/60" />
     </main>
   )
 }

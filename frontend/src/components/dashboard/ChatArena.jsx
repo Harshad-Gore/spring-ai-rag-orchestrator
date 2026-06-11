@@ -9,10 +9,10 @@ function ChatArena({ chatHistory, onSendMessage }) {
   const chatEndRef = useRef(null)
   const inputRef = useRef(null)
 
-  // Auto-scroll on new messages
+  // Auto-scroll on new messages or when thinking state changes
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatHistory])
+  }, [chatHistory, isThinking])
 
   async function handleSend() {
     const trimmed = inputValue.trim()
@@ -47,7 +47,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
     <div className="flex h-full flex-col bg-[#090909]">
       {/* Chat history */}
       <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6">
-        {isEmpty ? (
+        {isEmpty && !isThinking ? (
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-4 text-center">
               <div className="flex size-14 items-center justify-center rounded-2xl border border-[#2d2d2d] bg-[#111]">
@@ -120,6 +120,29 @@ function ChatArena({ chatHistory, onSendMessage }) {
                 )}
               </div>
             ))}
+
+            {/* Thinking indicator */}
+            {isThinking && (
+              <div className="flex gap-3 justify-start">
+                <div className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-[#2d2d2d] bg-[#111] mt-0.5">
+                  <MessageSquareText
+                    aria-hidden="true"
+                    className="size-3.5 text-[#dffdee]/60"
+                  />
+                </div>
+                <div className="rounded-2xl px-4 py-3.5 bg-[#111] border border-[#1a1a1a]">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <span className="size-1.5 rounded-full bg-[#dffdee]/50 animate-[bounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '0ms' }}></span>
+                      <span className="size-1.5 rounded-full bg-[#dffdee]/50 animate-[bounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '200ms' }}></span>
+                      <span className="size-1.5 rounded-full bg-[#dffdee]/50 animate-[bounce_1.4s_ease-in-out_infinite]" style={{ animationDelay: '400ms' }}></span>
+                    </div>
+                    <span className="text-xs text-[#657069] ml-1">Thinking…</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div ref={chatEndRef} />
           </div>
         )}
@@ -146,7 +169,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
             variant="default"
             size="icon"
             disabled={!inputValue.trim() || isThinking}
-            aria-label={isThinking ? 'Sending...' : 'Send message'}
+            aria-label={isThinking ? 'Thinking...' : 'Send message'}
             className="shrink-0"
           >
             {isThinking ? (
