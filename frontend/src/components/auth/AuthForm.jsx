@@ -155,6 +155,8 @@ function AuthForm({ onSubmit }) {
         } else {
           toast({ type: 'error', message: 'A verification link has been sent to your email. Please check your inbox.' })
         }
+      } else if (error.message.includes('not accepting new users')) {
+        toast({ type: 'error', message: error.message })
       } else {
         setFormError(error.message ?? 'Authentication failed. Please try again.')
       }

@@ -24,13 +24,14 @@ export default function ForgotPasswordPage() {
       })
 
       if (!response.ok) {
-        throw new Error('Something went wrong')
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message ?? 'Something went wrong')
       }
 
       setSubmitted(true)
       toast({ type: 'success', message: 'If an account exists with this email, a reset link has been sent.' })
     } catch (err) {
-      toast({ type: 'error', message: 'Failed to request password reset. Please try again later.' })
+      toast({ type: 'error', message: err.message ?? 'Failed to request password reset. Please try again later.' })
     } finally {
       setIsSubmitting(false)
     }

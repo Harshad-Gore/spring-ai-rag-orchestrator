@@ -8,6 +8,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -25,6 +26,9 @@ public class AuthService {
 	private final UserTokenRepository userTokenRepository;
 	private final EmailService emailService;
 
+	@Value("${app.signup.enabled:true}")
+	private boolean signupEnabled;
+
 	public AuthService(
 			JwtService jwtService,
 			PasswordEncoder passwordEncoder,
@@ -40,6 +44,10 @@ public class AuthService {
 
 	@Transactional(noRollbackFor = {UnverifiedUserException.class, RuntimeException.class})
 	public AuthResponse signup(SignupRequest request, String origin) {
+		if (!signupEnabled) {
+			throw new IllegalArgumentException("We are not accepting new users at this time. If you already have an account, please log in.");
+		}
+
 		String email = normalizeEmail(request.email());
 		if (userAccountRepository.existsByEmailIgnoreCase(email)) {
 			throw new DuplicateEmailException("An account with this email already exists.");
@@ -78,6 +86,10 @@ public class AuthService {
 			.orElseThrow(() -> new BadCredentialsException("Invalid email or password."));
 
 		if (user.getStatus() == UserStatus.UNVERIFIED) {
+			if (!signupEnabled) {
+				throw new IllegalArgumentException("This account is unverified. Email services are currently disabled on this environment. Please contact the administrator.");
+			}
+
 			// Issue a new token and resend email
 			userTokenRepository.deleteByUserIdAndTokenType(user.getId(), UserToken.TokenType.VERIFY_EMAIL);
 			String token = generateToken();
@@ -138,6 +150,10 @@ public class AuthService {
 
 	@Transactional
 	public void forgotPassword(String email, String origin) {
+		if (!signupEnabled) {
+			throw new IllegalArgumentException("Password reset is currently disabled on this environment. Please contact the administrator.");
+		}
+
 		userAccountRepository.findByEmailIgnoreCase(normalizeEmail(email)).ifPresent(user -> {
 			userTokenRepository.deleteByUserIdAndTokenType(user.getId(), UserToken.TokenType.RESET_PASSWORD);
 			String token = generateToken();
