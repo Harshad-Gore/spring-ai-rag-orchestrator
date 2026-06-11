@@ -79,6 +79,7 @@ public class SecurityConfig {
 	private List<String> parseOrigins(String frontendOrigins) {
 		return Arrays.stream(frontendOrigins.split(","))
 			.map(String::trim)
+			.map((origin) -> origin.replace("\r", ""))
 			.map((origin) -> origin.endsWith("/") ? origin.substring(0, origin.length() - 1) : origin)
 			.filter((origin) -> !origin.isBlank())
 			.toList();
