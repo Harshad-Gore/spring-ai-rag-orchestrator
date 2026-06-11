@@ -7,6 +7,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import CustomCursor from './components/ui/CustomCursor.jsx'
 
 function AuthLoadingScreen() {
   return (
@@ -38,18 +39,20 @@ function PublicOnlyRoute({ children }) {
 
 function App() {
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <PublicOnlyRoute>
-            <AuthPage />
-          </PublicOnlyRoute>
-        }
-      />
-      <Route
-        path="/verify-email"
-        element={
+    <>
+      <CustomCursor />
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <PublicOnlyRoute>
+              <AuthPage />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/verify-email"
+          element={
           <PublicOnlyRoute>
             <VerifyEmailPage />
           </PublicOnlyRoute>
@@ -87,8 +90,9 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </>
   )
 }
 
