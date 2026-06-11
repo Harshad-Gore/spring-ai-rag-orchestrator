@@ -3,6 +3,9 @@ import { Loader2 } from 'lucide-react'
 import { useAuth } from './hooks/useAuth.js'
 import AuthPage from './pages/AuthPage.jsx'
 import DashboardPage from './pages/DashboardPage.jsx'
+import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 
 function AuthLoadingScreen() {
   return (
@@ -40,6 +43,30 @@ function App() {
         element={
           <PublicOnlyRoute>
             <AuthPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/verify-email"
+        element={
+          <PublicOnlyRoute>
+            <VerifyEmailPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/forgot-password"
+        element={
+          <PublicOnlyRoute>
+            <ForgotPasswordPage />
+          </PublicOnlyRoute>
+        }
+      />
+      <Route
+        path="/reset-password"
+        element={
+          <PublicOnlyRoute>
+            <ResetPasswordPage />
           </PublicOnlyRoute>
         }
       />

@@ -47,4 +47,16 @@ public class ApiExceptionHandler {
 		return ResponseEntity.status(HttpStatus.FORBIDDEN)
 			.body(ApiError.of(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
 	}
+
+	@ExceptionHandler(com.harshad.orchestrator.auth.UnverifiedUserException.class)
+	public ResponseEntity<ApiError> handleUnverified(com.harshad.orchestrator.auth.UnverifiedUserException ex) {
+		return ResponseEntity.status(HttpStatus.FORBIDDEN)
+			.body(ApiError.of(HttpStatus.FORBIDDEN.value(), ex.getMessage()));
+	}
+
+	@ExceptionHandler(IllegalArgumentException.class)
+	public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
+		return ResponseEntity.badRequest()
+			.body(ApiError.of(HttpStatus.BAD_REQUEST.value(), ex.getMessage()));
+	}
 }

@@ -12,6 +12,8 @@ import {
 import { Button } from '../ui/button.jsx'
 import { Field, FieldError, FieldGroup, FieldLabel } from '../ui/field.jsx'
 import { Input } from '../ui/input.jsx'
+import { Link } from 'react-router-dom'
+import { useToast } from '../ui/toast.jsx'
 
 const initialValues = {
   confirmPassword: '',
@@ -91,6 +93,7 @@ function AuthForm({ onSubmit }) {
   const [formError, setFormError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
 
   const isSignup = mode === 'signup'
   const currentCopy = copy[mode]
@@ -144,7 +147,17 @@ function AuthForm({ onSubmit }) {
       })
     } catch (error) {
       setErrors(error.fields ?? {})
-      setFormError(error.message ?? 'Authentication failed. Please try again.')
+      if (error.message === 'UNVERIFIED_ACCOUNT') {
+        if (mode === 'signup') {
+          setMode('login')
+          setValues((prev) => ({ ...prev, password: '', confirmPassword: '' }))
+          toast({ type: 'success', message: 'Email has been sent. Verify email to login.' })
+        } else {
+          toast({ type: 'error', message: 'A verification link has been sent to your email. Please check your inbox.' })
+        }
+      } else {
+        setFormError(error.message ?? 'Authentication failed. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -243,7 +256,14 @@ function AuthForm({ onSubmit }) {
           </Field>
 
           <Field className="gap-2">
-            <FieldLabel htmlFor="password">Password</FieldLabel>
+            <div className="flex items-center justify-between">
+              <FieldLabel htmlFor="password">Password</FieldLabel>
+              {!isSignup && (
+                <Link to="/forgot-password" className="text-xs font-semibold text-[#58d68d] hover:text-[#dffdee] transition">
+                  Forgot password?
+                </Link>
+              )}
+            </div>
             <Input
               id="password"
               type={showPassword ? 'text' : 'password'}

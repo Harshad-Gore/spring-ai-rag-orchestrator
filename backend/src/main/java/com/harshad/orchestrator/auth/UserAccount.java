@@ -95,4 +95,12 @@ public class UserAccount {
 	public Instant getUpdatedAt() {
 		return updatedAt;
 	}
+
+	public void setStatus(UserStatus status) {
+		this.status = status;
+	}
+
+	public void setPasswordHash(String passwordHash) {
+		this.passwordHash = passwordHash;
+	}
 }

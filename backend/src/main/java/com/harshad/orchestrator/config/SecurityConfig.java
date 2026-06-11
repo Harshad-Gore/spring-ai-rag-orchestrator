@@ -38,7 +38,7 @@ public class SecurityConfig {
 			.sessionManagement((session) -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.authorizeHttpRequests((authorize) -> authorize
 				.dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ASYNC, jakarta.servlet.DispatcherType.ERROR).permitAll()
-				.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup").permitAll()
+				.requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/signup", "/api/auth/verify-email", "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/auth/session").permitAll()
 				.requestMatchers(HttpMethod.GET, "/api/health").permitAll()
 				.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
