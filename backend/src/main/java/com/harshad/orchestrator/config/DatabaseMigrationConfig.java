@@ -28,12 +28,27 @@ public class DatabaseMigrationConfig {
 			DataSource dataSource,
 			@Value("${spring.flyway.locations:classpath:db/migration}") String locations,
 			@Value("${spring.flyway.baseline-on-migrate:false}") boolean baselineOnMigrate) {
-		return Flyway.configure()
+		cleanStaleFlywayHistory(dataSource);
+		Flyway flyway = Flyway.configure()
 			.dataSource(dataSource)
 			.locations(parseLocations(locations))
 			.baselineOnMigrate(baselineOnMigrate)
-			.load()
-			.migrate();
+			.load();
+		flyway.repair();
+		return flyway.migrate();
+	}
+
+	private void cleanStaleFlywayHistory(DataSource dataSource) {
+		try (var conn = dataSource.getConnection();
+			 var stmt = conn.createStatement()) {
+			stmt.execute("""
+				DELETE FROM flyway_schema_history
+				WHERE version IN ('2', '3')
+				AND description IN ('create notebooks', 'create documents')
+			""");
+		} catch (Exception ignored) {
+			// Table may not exist on first run — safe to ignore
+		}
 	}
 
 	@Bean

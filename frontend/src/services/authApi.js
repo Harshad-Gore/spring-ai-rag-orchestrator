@@ -81,7 +81,7 @@ function storeAuthResponse(response) {
   return response
 }
 
-function getStoredAuthToken() {
+export function getStoredAuthToken() {
   if (typeof window === 'undefined') {
     return null
   }
