@@ -12,6 +12,11 @@ import org.thymeleaf.context.Context;
 import jakarta.annotation.PostConstruct;
 import jakarta.mail.internet.MimeMessage;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 @Service
 public class EmailService {
 
@@ -32,6 +37,9 @@ public class EmailService {
 	@Value("${app.frontend.url}")
 	private String frontendUrl;
 
+	@Value("${app.resend.api-key:}")
+	private String resendApiKey;
+
 	public EmailService(JavaMailSender mailSender, TemplateEngine templateEngine) {
 		this.mailSender = mailSender;
 		this.templateEngine = templateEngine;
@@ -39,7 +47,15 @@ public class EmailService {
 
 	@PostConstruct
 	public void logMailConfig() {
-		log.info("Email service initialized: host={}, port={}, from={}", mailHost, mailPort, fromEmail);
+		if (isResendEnabled()) {
+			log.info("Email service initialized: provider=RESEND, from={}", fromEmail);
+		} else {
+			log.info("Email service initialized: provider=SMTP, host={}, port={}, from={}", mailHost, mailPort, fromEmail);
+		}
+	}
+
+	private boolean isResendEnabled() {
+		return resendApiKey != null && !resendApiKey.isBlank();
 	}
 
 	public void sendVerificationEmail(String toEmail, String name, String token, String origin) {
@@ -50,7 +66,7 @@ public class EmailService {
 		context.setVariable("url", verifyUrl);
 
 		String htmlContent = templateEngine.process("verify-email", context);
-		sendHtmlEmail(toEmail, "Verify your email address", htmlContent);
+		sendEmail(toEmail, "Verify your email address", htmlContent);
 	}
 
 	public void sendPasswordResetEmail(String toEmail, String name, String token, String origin) {
@@ -61,7 +77,7 @@ public class EmailService {
 		context.setVariable("url", resetUrl);
 
 		String htmlContent = templateEngine.process("reset-password", context);
-		sendHtmlEmail(toEmail, "Reset your password", htmlContent);
+		sendEmail(toEmail, "Reset your password", htmlContent);
 	}
 
 	public void sendWelcomeEmail(String toEmail, String name, String origin) {
@@ -71,7 +87,7 @@ public class EmailService {
 			context.setVariable("url", resolveBaseUrl(origin));
 
 			String htmlContent = templateEngine.process("welcome", context);
-			sendHtmlEmail(toEmail, "Welcome to Notebook!", htmlContent);
+			sendEmail(toEmail, "Welcome to Notebook!", htmlContent);
 		} catch (Exception e) {
 			log.error("Failed to send welcome email to {}", toEmail, e);
 		}
@@ -83,7 +99,7 @@ public class EmailService {
 			context.setVariable("name", name);
 
 			String htmlContent = templateEngine.process("password-changed", context);
-			sendHtmlEmail(toEmail, "Your password has been changed", htmlContent);
+			sendEmail(toEmail, "Your password has been changed", htmlContent);
 		} catch (Exception e) {
 			log.error("Failed to send password changed email to {}", toEmail, e);
 		}
@@ -97,7 +113,54 @@ public class EmailService {
 		return base;
 	}
 
-	private void sendHtmlEmail(String to, String subject, String htmlBody) {
+	private void sendEmail(String to, String subject, String htmlBody) {
+		if (isResendEnabled()) {
+			sendViaResend(to, subject, htmlBody);
+		} else {
+			sendViaSmtp(to, subject, htmlBody);
+		}
+	}
+
+	private void sendViaResend(String to, String subject, String htmlBody) {
+		try {
+			// Escape JSON special characters in the HTML body
+			String escapedHtml = htmlBody
+				.replace("\\", "\\\\")
+				.replace("\"", "\\\"")
+				.replace("\n", "\\n")
+				.replace("\r", "\\r")
+				.replace("\t", "\\t");
+
+			String jsonBody = String.format(
+				"{\"from\":\"%s\",\"to\":[\"%s\"],\"subject\":\"%s\",\"html\":\"%s\"}",
+				"Notebook <onboarding@resend.dev>", to, subject, escapedHtml
+			);
+
+			HttpClient client = HttpClient.newHttpClient();
+			HttpRequest request = HttpRequest.newBuilder()
+				.uri(URI.create("https://api.resend.com/emails"))
+				.header("Authorization", "Bearer " + resendApiKey)
+				.header("Content-Type", "application/json")
+				.POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+				.build();
+
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+			if (response.statusCode() >= 200 && response.statusCode() < 300) {
+				log.info("Email sent via Resend to: {} | subject: {} | response: {}", to, subject, response.body());
+			} else {
+				log.error("Resend API error: status={} body={}", response.statusCode(), response.body());
+				throw new RuntimeException("Resend API returned " + response.statusCode() + ": " + response.body());
+			}
+		} catch (RuntimeException e) {
+			throw e;
+		} catch (Exception e) {
+			log.error("EMAIL SEND FAILED (Resend) to: {} | subject: {} | error: {}", to, subject, e.getMessage(), e);
+			throw new RuntimeException("Failed to send email via Resend to " + to + ": " + e.getMessage(), e);
+		}
+	}
+
+	private void sendViaSmtp(String to, String subject, String htmlBody) {
 		try {
 			MimeMessage message = mailSender.createMimeMessage();
 			MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -106,11 +169,11 @@ public class EmailService {
 			helper.setSubject(subject);
 			helper.setText(htmlBody, true);
 			mailSender.send(message);
-			log.info("Email sent successfully to: {} with subject: {}", to, subject);
+			log.info("Email sent via SMTP to: {} | subject: {}", to, subject);
 		} catch (Exception e) {
-			log.error("EMAIL SEND FAILED to: {} | subject: {} | host: {}:{} | from: {} | error: {}",
-				to, subject, mailHost, mailPort, fromEmail, e.getMessage(), e);
-			throw new RuntimeException("Failed to send email to " + to + ": " + e.getMessage(), e);
+			log.error("EMAIL SEND FAILED (SMTP) to: {} | host: {}:{} | from: {} | error: {}",
+				to, mailHost, mailPort, fromEmail, e.getMessage(), e);
+			throw new RuntimeException("Failed to send email via SMTP to " + to + ": " + e.getMessage(), e);
 		}
 	}
 }
