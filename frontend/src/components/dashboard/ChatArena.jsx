@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Bot, Loader2, Send, Sparkles, User } from 'lucide-react'
+import { Bot, ChevronDown, Loader2, Send, Sparkles, User } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '../ui/button.jsx'
@@ -139,14 +139,29 @@ function getStoredToken() {
   try { return localStorage.getItem('auth_token') } catch { return null }
 }
 
+const GROQ_MODELS = [
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', tag: 'General', tagColor: '#58d68d' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B', tag: 'Fast', tagColor: '#5dade2' },
+  { id: 'meta-llama/llama-4-scout-17b-16e-instruct', label: 'Llama 4 Scout', tag: 'Balanced', tagColor: '#f4d03f' },
+  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B', tag: 'Reasoning', tagColor: '#af7ac5' },
+  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', tag: 'Efficient', tagColor: '#eb984e' },
+]
+
 function ChatArena({ chatHistory, onSendMessage }) {
   const [inputValue, setInputValue] = useState('')
+  const [selectedModel, setSelectedModel] = useState(() => {
+    return localStorage.getItem('selected_model') || GROQ_MODELS[0].id
+  })
   const [isThinking, setIsThinking] = useState(false)         // waiting for first token
   const [isStreaming, setIsStreaming] = useState(false)        // tokens arriving
   const [streamingMsgId, setStreamingMsgId] = useState(null)
   const chatEndRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
+
+  useEffect(() => {
+    localStorage.setItem('selected_model', selectedModel)
+  }, [selectedModel])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -163,12 +178,12 @@ function ChatArena({ chatHistory, onSendMessage }) {
     setStreamingMsgId(msgId)
 
     // Add user msg + empty placeholder for streaming response
-    await onSendMessage(trimmed, msgId)
+    await onSendMessage(trimmed, selectedModel, msgId)
     setIsThinking(false)
     setIsStreaming(true)
 
     inputRef.current?.focus()
-  }, [inputValue, isThinking, isStreaming, onSendMessage])
+  }, [inputValue, isThinking, isStreaming, selectedModel, onSendMessage])
 
   function handleKeyDown(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
@@ -251,6 +266,19 @@ function ChatArena({ chatHistory, onSendMessage }) {
 
       {/* ── Input bar ────────────────────────────────────────────── */}
       <div className="shrink-0 border-t border-[#1a1a1a] bg-[#080908] px-4 py-3 sm:px-8">
+        <div className="mx-auto max-w-4xl flex items-center gap-2 pb-2">
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[#657069]">Model</span>
+          <select
+            value={selectedModel}
+            onChange={(e) => setSelectedModel(e.target.value)}
+            className="appearance-none cursor-pointer rounded-lg border border-[#242424] bg-[#111] px-3 py-1.5 pr-7 text-xs font-medium text-[#c8cdc9] outline-none transition hover:border-[#3a3a3a] focus:border-[#2a4a34] focus:ring-1 focus:ring-[#58d68d]/20"
+            aria-label="Select AI model"
+          >
+            {GROQ_MODELS.map(m => (
+              <option key={m.id} value={m.id}>{m.label} — {m.tag}</option>
+            ))}
+          </select>
+        </div>
         <form
           onSubmit={(e) => { e.preventDefault(); handleSend() }}
           className="mx-auto flex max-w-4xl items-end gap-2"

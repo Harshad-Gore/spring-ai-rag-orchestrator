@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -38,7 +40,8 @@ public class ChatController {
 	@PostMapping("/ask")
 	public ResponseEntity<ChatResponse> ask(@RequestBody ChatRequest request) {
 		try {
-			ChatResponse response = chatService.ask(request.query(), UUID.fromString(request.notebookId()));
+			ChatResponse response = chatService.ask(
+				request.query(), UUID.fromString(request.notebookId()), request.model());
 			return ResponseEntity.ok(response);
 		} catch (Exception ex) {
 			log.error("Chat error for notebook {}: {}", request.notebookId(), ex.getMessage(), ex);
@@ -57,7 +60,8 @@ public class ChatController {
 	@PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	public Flux<ServerSentEvent<String>> stream(@RequestBody ChatRequest request) {
 		try {
-			StreamContext ctx = chatService.prepareStream(request.query(), UUID.fromString(request.notebookId()));
+			StreamContext ctx = chatService.prepareStream(
+				request.query(), UUID.fromString(request.notebookId()), request.model());
 
 			Flux<ServerSentEvent<String>> tokenEvents = ctx.tokenStream()
 				.map(token -> {
@@ -103,6 +107,21 @@ public class ChatController {
 		}
 	}
 
+	/** Fetch chat history for a notebook */
+	@GetMapping("/notebook/{notebookId}/history")
+	public ResponseEntity<List<ChatMessageDto>> getHistory(@PathVariable UUID notebookId) {
+		List<ChatMessage> messages = chatService.getHistory(notebookId);
+		List<ChatMessageDto> dtos = messages.stream()
+			.map(m -> new ChatMessageDto(
+				m.getId().toString(),
+				m.getRole().name().toLowerCase(),
+				m.getContent(),
+				m.getModelUsed(),
+				m.getCreatedAt().toString()))
+			.toList();
+		return ResponseEntity.ok(dtos);
+	}
+
 	private String serializeCitations(List<Citation> citations) {
 		try {
 			return objectMapper.writeValueAsString(citations);
@@ -110,4 +129,6 @@ public class ChatController {
 			return "[]";
 		}
 	}
+
+	public record ChatMessageDto(String id, String role, String content, String modelUsed, String createdAt) {}
 }

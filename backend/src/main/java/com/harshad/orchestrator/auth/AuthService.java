@@ -124,7 +124,21 @@ public class AuthService {
 	@Transactional(readOnly = true)
 	public AuthUserResponse currentUser(AuthenticatedUser principal) {
 		UserAccount user = userAccountRepository.findById(principal.id())
-			.orElseThrow(() -> new BadCredentialsException("Invalid authentication token."));
+			.orElseThrow(() -> new IllegalStateException("Authenticated user not found in DB"));
+		return AuthUserResponse.from(user);
+	}
+
+	@Transactional
+	public AuthUserResponse updateProfile(AuthenticatedUser principal, UpdateProfileRequest request) {
+		UserAccount user = userAccountRepository.findById(principal.id())
+			.orElseThrow(() -> new IllegalStateException("Authenticated user not found in DB"));
+		
+		user.setFullName(request.fullName().trim());
+		if (request.avatarUrl() != null) {
+			user.setAvatarUrl(request.avatarUrl().trim().isEmpty() ? null : request.avatarUrl().trim());
+		}
+
+		userAccountRepository.save(user);
 		return AuthUserResponse.from(user);
 	}
 

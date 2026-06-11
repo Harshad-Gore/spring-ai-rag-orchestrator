@@ -3,6 +3,8 @@ package com.harshad.orchestrator.document;
 import java.util.List;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -20,6 +23,8 @@ import com.harshad.orchestrator.auth.AuthenticatedUser;
 @RestController
 @RequestMapping("/api/documents")
 public class DocumentController {
+
+	private static final Logger log = LoggerFactory.getLogger(DocumentController.class);
 
 	private final DocumentService documentService;
 
@@ -54,6 +59,22 @@ public class DocumentController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@PostMapping("/ingest-url")
+	public ResponseEntity<?> ingestUrl(
+			Authentication auth,
+			@RequestBody UrlIngestRequest request) {
+		try {
+			UUID userId = ((AuthenticatedUser) auth.getPrincipal()).id();
+			Document doc = documentService.ingestUrl(
+				request.url(), UUID.fromString(request.notebookId()), userId);
+			return ResponseEntity.status(HttpStatus.CREATED).body(DocumentResponse.from(doc));
+		} catch (Throwable e) {
+			log.error("Failed to ingest URL: {}", request.url(), e);
+			return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(new UrlIngestErrorResponse("Failed to extract content from URL: " + e.getMessage()));
+		}
+	}
+
 	public record DocumentResponse(
 			String id,
 			String notebookId,
@@ -74,4 +95,7 @@ public class DocumentController {
 			);
 		}
 	}
+
+	public record UrlIngestRequest(String url, String notebookId) {}
+	public record UrlIngestErrorResponse(String error) {}
 }

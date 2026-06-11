@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import {
   GalleryVerticalEnd,
   Home,
+  Loader2,
   LogOut,
   Menu,
   Plus,
@@ -12,17 +13,23 @@ import {
 } from 'lucide-react'
 import { Button } from '../ui/button.jsx'
 import { Input } from '../ui/input.jsx'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth.js'
 
 function DashboardNavbar({
+  isCreatingNotebook,
   onCreateNotebook,
   onGoHome,
   onLogout,
   onSearchChange,
   searchValue,
+  isSettingsPage = false,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const profileRef = useRef(null)
+  const navigate = useNavigate()
+  const { user } = useAuth()
 
   // Close profile dropdown on outside click
   useEffect(() => {
@@ -85,65 +92,93 @@ function DashboardNavbar({
           Dashboard
         </button>
 
-        {/* Center: search — fills available space */}
+        {/* Center: search or settings label */}
         <div className="ml-auto hidden flex-1 md:block lg:mx-4">
-          <div className="mx-auto max-w-sm">
-            <Input
-              type="search"
-              value={searchValue}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search notebooks…"
-              icon={Search}
-              aria-label="Search notebooks"
-              className="h-9 text-xs"
-            />
-          </div>
+          {!isSettingsPage ? (
+            <div className="mx-auto max-w-sm">
+              <Input
+                type="search"
+                value={searchValue}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search notebooks…"
+                icon={Search}
+                aria-label="Search notebooks"
+                className="h-9 text-xs"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center text-sm font-medium text-[#c8cdc9]">
+              Settings
+            </div>
+          )}
         </div>
 
         {/* Right: create + profile */}
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
-          {/* Create Notebook — desktop */}
-          <Button
-            type="button"
-            variant="default"
-            size="sm"
-            onClick={onCreateNotebook}
-            className="hidden md:inline-flex"
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            New Notebook
-          </Button>
+          {!isSettingsPage && (
+            <>
+              {/* Create Notebook — desktop */}
+              <Button
+                type="button"
+                variant="default"
+                size="sm"
+                onClick={onCreateNotebook}
+                disabled={isCreatingNotebook}
+                className="hidden md:inline-flex"
+              >
+                {isCreatingNotebook ? (
+                  <><Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> Creating...</>
+                ) : (
+                  <><Plus aria-hidden="true" className="size-3.5" /> New Notebook</>
+                )}
+              </Button>
 
-          {/* Create Notebook — mobile icon */}
-          <Button
-            type="button"
-            variant="default"
-            size="icon"
-            onClick={onCreateNotebook}
-            aria-label="Create new notebook"
-            className="md:hidden size-8"
-          >
-            <Plus aria-hidden="true" className="size-4" />
-          </Button>
+              {/* Create Notebook — mobile icon */}
+              <Button
+                type="button"
+                variant="default"
+                size="icon"
+                onClick={onCreateNotebook}
+                disabled={isCreatingNotebook}
+                aria-label="Create new notebook"
+                className="md:hidden size-8"
+              >
+                {isCreatingNotebook ? (
+                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                ) : (
+                  <Plus aria-hidden="true" className="size-4" />
+                )}
+              </Button>
+            </>
+          )}
 
           {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
             <button
               type="button"
               onClick={() => setProfileOpen((prev) => !prev)}
-              className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-[#101211] text-[#9aa39f] transition hover:border-white/15 hover:bg-[#151917] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-full border border-white/10 bg-[#101211] text-[#9aa39f] transition hover:border-white/15 hover:bg-[#151917] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25 overflow-hidden"
               aria-label="User menu"
               aria-expanded={profileOpen}
             >
-              <User aria-hidden="true" className="size-3.5" />
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" className="size-full object-cover" />
+              ) : (
+                <User aria-hidden="true" className="size-3.5" />
+              )}
             </button>
 
             {profileOpen && (
-              <div className="absolute right-0 top-full z-40 mt-2 w-44 overflow-hidden rounded-xl border border-[#242424] bg-[#0d0d0d] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+              <div className="absolute right-0 top-full z-40 mt-2 w-56 overflow-hidden rounded-xl border border-[#242424] bg-[#0d0d0d] shadow-[0_12px_40px_rgba(0,0,0,0.5)]">
+                <div className="border-b border-[#1a1a1a] px-4 py-3">
+                  <p className="text-sm font-medium text-white truncate">{user?.fullName || 'User'}</p>
+                  <p className="text-xs text-[#657069] truncate">{user?.email}</p>
+                </div>
                 <button
                   type="button"
                   onClick={() => {
                     setProfileOpen(false)
+                    navigate('/settings')
                   }}
                   className="flex w-full cursor-pointer items-center gap-2.5 px-3.5 py-2.5 text-sm text-[#c8cdc9] transition hover:bg-white/[0.06] hover:text-white"
                 >

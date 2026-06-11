@@ -1,8 +1,23 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronLeft, FileText, Pencil, Trash2, Upload } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Globe, Pencil, Trash2, Upload, Video, Home, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { Button } from '../ui/button.jsx'
 
-function DocumentSidebar({ notebook, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook }) {
+function getDocIcon(doc) {
+  if (doc.contentType === 'video/youtube') return <Video aria-hidden="true" className="size-5 shrink-0 text-red-400" />
+  if (doc.contentType === 'text/html') return <Globe aria-hidden="true" className="size-5 shrink-0 text-[#5dade2]" />
+  return <FileText aria-hidden="true" className="size-5 shrink-0 text-[#dffdee]/50" />
+}
+
+function getInitials(title) {
+  if (!title) return 'N'
+  const words = title.trim().split(/\s+/)
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase()
+  }
+  return title.slice(0, 2).toUpperCase()
+}
+
+function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook }) {
   const documents = notebook?.documents ?? []
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(notebook?.title ?? '')
@@ -40,98 +55,144 @@ function DocumentSidebar({ notebook, onBack, onOpenUpload, onRemoveDocument, onR
   }
 
   return (
-    <aside className="flex h-full flex-col border-r border-[#242424] bg-[#090909]">
+    <aside className="flex h-full flex-col border-r border-[#242424] bg-[#090909] overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 border-b border-[#242424] px-4 py-4">
-        <button
-          type="button"
-          onClick={onBack}
-          className="mb-3 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-[#9aa39f] transition hover:bg-white/[0.06] hover:text-white focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
-        >
-          <ChevronLeft aria-hidden="true" className="size-3.5" />
-          Back
-        </button>
-        <div className="group flex items-center gap-2">
-          {isEditing ? (
-            <input
-              ref={inputRef}
-              type="text"
-              value={editTitle}
-              onChange={(e) => setEditTitle(e.target.value)}
-              onBlur={handleRenameSubmit}
-              onKeyDown={handleKeyDown}
-              className="w-full rounded-md border border-[#dffdee]/30 bg-[#111] px-2 py-1 text-base font-semibold text-white outline-none focus:border-[#dffdee]/50 focus:ring-2 focus:ring-[#b9f7d3]/15"
-            />
+      <div className={`shrink-0 border-b border-[#242424] flex flex-col ${isCollapsed ? 'p-3 gap-4' : 'p-4 gap-4'}`}>
+        
+        {/* Top bar: Back */}
+        <div className={`flex items-center ${isCollapsed ? 'justify-center' : ''}`}>
+          {isCollapsed ? (
+            <button
+              type="button"
+              onClick={onBack}
+              title="Back to Dashboard"
+              className="flex size-10 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#9aa39f] transition hover:bg-white/[0.08] hover:text-white focus:outline-none"
+            >
+              <Home aria-hidden="true" className="size-5" />
+            </button>
           ) : (
-            <>
-              <h2
-                className="min-w-0 flex-1 truncate text-base font-semibold text-white cursor-pointer"
-                onDoubleClick={() => setIsEditing(true)}
-                title="Double-click to rename"
-              >
-                {notebook?.title ?? 'Notebook'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsEditing(true)}
-                className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-white/[0.08] hover:text-white focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
-                aria-label="Rename notebook"
-              >
-                <Pencil aria-hidden="true" className="size-3" />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-white/[0.06] hover:text-white focus:outline-none"
+            >
+              <Home aria-hidden="true" className="size-4" />
+              Dashboard
+            </button>
           )}
         </div>
+
+        {/* Title Area (only when expanded) */}
+        {!isCollapsed && (
+          <div className="group flex items-center justify-between gap-2 px-1.5">
+            {isEditing ? (
+              <input
+                ref={inputRef}
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={handleRenameSubmit}
+                onKeyDown={handleKeyDown}
+                className="w-full rounded-md border border-[#dffdee]/30 bg-[#111] px-2 py-1 text-lg font-bold text-white outline-none focus:border-[#dffdee]/50"
+              />
+            ) : (
+              <>
+                <h2
+                  className="min-w-0 flex-1 truncate text-lg font-bold text-white cursor-pointer"
+                  onDoubleClick={() => setIsEditing(true)}
+                  title="Double-click to rename"
+                >
+                  {notebook?.title ?? 'Notebook'}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(true)}
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-white/[0.08] hover:text-white focus:outline-none"
+                  aria-label="Rename notebook"
+                >
+                  <Pencil aria-hidden="true" className="size-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Collapsed Avatar Title */}
+        {isCollapsed && (
+          <div className="flex justify-center pt-2 pb-1">
+            <div 
+              className="flex size-10 items-center justify-center rounded-[10px] bg-gradient-to-b from-[#242424] to-[#111] border border-[#333] text-[#dffdee] font-bold text-[13px] shadow-sm select-none"
+              title={notebook?.title ?? 'Notebook'}
+            >
+              {getInitials(notebook?.title)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Upload button */}
-      <div className="shrink-0 px-4 py-3">
+      <div className={`shrink-0 py-3 ${isCollapsed ? 'px-2' : 'px-4'}`}>
         <Button
           type="button"
           variant="outline"
           onClick={onOpenUpload}
-          className="w-full"
+          title="Upload Source"
+          className={isCollapsed ? 'w-full px-0 flex justify-center' : 'w-full'}
         >
           <Upload aria-hidden="true" className="size-4" />
-          Upload Source
+          {!isCollapsed && <span className="ml-2">Upload</span>}
         </Button>
       </div>
 
       {/* Document list */}
       <div className="flex-1 overflow-y-auto px-2">
         {documents.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-            <div className="flex size-10 items-center justify-center rounded-lg border border-[#2d2d2d] bg-[#111]">
+          <div className={`flex flex-col items-center gap-2 py-10 text-center ${isCollapsed ? 'px-1' : 'px-4'}`}>
+            <div className="flex size-10 items-center justify-center rounded-lg border border-[#2d2d2d] bg-[#111]" title="No sources uploaded yet">
               <FileText aria-hidden="true" className="size-4 text-[#657069]" />
             </div>
-            <p className="text-sm text-[#657069]">No sources uploaded yet</p>
+            {!isCollapsed && <p className="text-sm text-[#657069]">No sources</p>}
           </div>
         ) : (
-          <ul className="space-y-0.5 py-1">
+          <ul className="space-y-1 py-1">
             {documents.map((doc) => (
               <li
                 key={doc.id}
-                className="group flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition hover:bg-white/[0.04]"
+                title={doc.title}
+                className={`group flex items-center rounded-lg transition hover:bg-white/[0.04] ${isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2.5'}`}
               >
-                <FileText
-                  aria-hidden="true"
-                  className="size-4 shrink-0 text-[#dffdee]/40"
-                />
-                <span className="min-w-0 flex-1 truncate text-sm text-[#c8cdc9]">
-                  {doc.title}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onRemoveDocument(doc.id)}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
-                  aria-label={`Remove ${doc.title}`}
-                >
-                  <Trash2 aria-hidden="true" className="size-3.5" />
-                </button>
+                {getDocIcon(doc)}
+                {!isCollapsed && (
+                  <>
+                    <span className="min-w-0 flex-1 truncate text-sm text-[#c8cdc9]">
+                      {doc.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
+                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
+                      aria-label={`Remove ${doc.title}`}
+                    >
+                      <Trash2 aria-hidden="true" className="size-3.5" />
+                    </button>
+                  </>
+                )}
               </li>
             ))}
           </ul>
         )}
+      </div>
+
+      {/* Footer Toggle */}
+      <div className={`shrink-0 border-t border-[#242424] flex ${isCollapsed ? 'justify-center p-3' : 'justify-end p-3'}`}>
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? `Expand Sidebar (${notebook?.title || 'Notebook'})` : "Collapse Sidebar"}
+          className="flex size-8 items-center justify-center rounded-md text-[#657069] transition hover:bg-white/[0.08] hover:text-white focus:outline-none"
+        >
+          {isCollapsed ? <PanelLeftOpen aria-hidden="true" className="size-5" /> : <PanelLeftClose aria-hidden="true" className="size-5" />}
+        </button>
       </div>
     </aside>
   )

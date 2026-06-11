@@ -20,16 +20,19 @@ public class DocumentService {
 	private final DocumentChunkRepository chunkRepository;
 	private final StorageService storageService;
 	private final TextExtractorService textExtractor;
+	private final WebContentExtractor webContentExtractor;
 
 	public DocumentService(
 			DocumentRepository documentRepository,
 			DocumentChunkRepository chunkRepository,
 			StorageService storageService,
-			TextExtractorService textExtractor) {
+			TextExtractorService textExtractor,
+			WebContentExtractor webContentExtractor) {
 		this.documentRepository = documentRepository;
 		this.chunkRepository = chunkRepository;
 		this.storageService = storageService;
 		this.textExtractor = textExtractor;
+		this.webContentExtractor = webContentExtractor;
 	}
 
 	@Transactional(readOnly = true)
@@ -82,6 +85,38 @@ public class DocumentService {
 			doc.setStatus(DocumentStatus.FAILED);
 			documentRepository.save(doc);
 			throw new RuntimeException("Failed to process: " + file.getOriginalFilename(), e);
+		}
+	}
+
+	@Transactional
+	public Document ingestUrl(String url, UUID notebookId, UUID userId) {
+		try {
+			WebContentExtractor.WebContent content = webContentExtractor.extract(url);
+
+			if (content.text() == null || content.text().isBlank()) {
+				throw new RuntimeException("No readable content could be extracted from: " + url);
+			}
+
+			String title = content.title() != null && !content.title().isBlank()
+				? content.title() : url;
+
+			Document doc = new Document(notebookId, userId,
+				title, content.contentType(), content.text().length(), url);
+			doc = documentRepository.save(doc);
+
+			List<String> chunks = textExtractor.chunkText(content.text(), MAX_WORDS_PER_CHUNK);
+			log.info("Extracted {} chars, {} chunks from URL: {}", content.text().length(), chunks.size(), url);
+
+			for (int i = 0; i < chunks.size(); i++) {
+				chunkRepository.save(new DocumentChunk(
+					doc.getId(), notebookId, title, i, chunks.get(i)));
+			}
+
+			doc.setStatus(DocumentStatus.PROCESSED);
+			return documentRepository.save(doc);
+		} catch (Throwable e) {
+			log.error("Failed to ingest URL: {}", url, e);
+			throw new RuntimeException("Failed to ingest URL: " + e.getMessage(), e);
 		}
 	}
 

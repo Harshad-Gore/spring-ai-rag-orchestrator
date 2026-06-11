@@ -7,6 +7,7 @@ public record AuthUserResponse(
 	UUID id,
 	String email,
 	String fullName,
+	String avatarUrl,
 	UserRole role,
 	UserStatus status,
 	Instant createdAt
@@ -17,6 +18,7 @@ public record AuthUserResponse(
 			user.getId(),
 			user.getEmail(),
 			user.getFullName(),
+			user.getAvatarUrl(),
 			user.getRole(),
 			user.getStatus(),
 			user.getCreatedAt()

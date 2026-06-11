@@ -4,7 +4,8 @@ import { useAuth } from '../hooks/useAuth.js'
 import { getStoredAuthToken } from '../services/authApi.js'
 import DashboardNavbar from '../components/dashboard/DashboardNavbar.jsx'
 import NotebookLibrary from '../components/dashboard/NotebookLibrary.jsx'
-import NotebookWorkspace from '../components/dashboard/NotebookWorkspace.jsx'
+import DocumentSidebar from '../components/dashboard/DocumentSidebar.jsx'
+import ChatArena from '../components/dashboard/ChatArena.jsx'
 import UploadModal from '../components/dashboard/UploadModal.jsx'
 import { ConfirmationDialog } from '../components/ui/confirmation-dialog.jsx'
 import { useToast } from '../components/ui/toast.jsx'
@@ -45,10 +46,14 @@ function DashboardPage() {
 
   // Core state
   const [notebooks, setNotebooks] = useState([])
-  const [activeNotebookId, setActiveNotebookId] = useState(null)
+  const [activeNotebookId, setActiveNotebookId] = useState(() => localStorage.getItem('active_notebook_id'))
   const [searchQuery, setSearchQuery] = useState('')
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebar_width')) || 320)
+  const [isDragging, setIsDragging] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(true)
+  const [isCreatingNotebook, setIsCreatingNotebook] = useState(false)
   const [confirmConfig, setConfirmConfig] = useState({
     isOpen: false,
     title: '',
@@ -59,25 +64,40 @@ function DashboardPage() {
 
   const closeConfirm = () => setConfirmConfig((prev) => ({ ...prev, isOpen: false }))
 
-  // Fetch notebooks from database on mount
   useEffect(() => {
-    async function fetchNotebooks() {
-      try {
-        const res = await apiFetch('/api/notebooks')
-        if (res.ok) {
-          const data = await res.json()
-          setNotebooks(
-            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
-          )
-        }
-      } catch (err) {
-        console.error('Failed to fetch notebooks:', err)
-      } finally {
-        setIsLoadingNotebooks(false)
-      }
+    localStorage.setItem('sidebar_collapsed', isSidebarCollapsed)
+  }, [isSidebarCollapsed])
+
+  useEffect(() => {
+    localStorage.setItem('sidebar_width', sidebarWidth)
+  }, [sidebarWidth])
+
+  useEffect(() => {
+    if (!isDragging) return
+    const handleMouseMove = (e) => {
+      let newWidth = e.clientX
+      if (newWidth < 200) newWidth = 200
+      if (newWidth > 600) newWidth = 600
+      setSidebarWidth(newWidth)
     }
-    fetchNotebooks()
-  }, [])
+    const handleMouseUp = () => setIsDragging(false)
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging])
+
+  useEffect(() => {
+    if (activeNotebookId) {
+      localStorage.setItem('active_notebook_id', activeNotebookId)
+    } else {
+      localStorage.removeItem('active_notebook_id')
+    }
+  }, [activeNotebookId])
+
+
 
   // Derived
   const activeNotebook = activeNotebookId
@@ -87,6 +107,8 @@ function DashboardPage() {
   // ------- Notebook CRUD -------
 
   const handleCreateNotebook = useCallback(async () => {
+    if (isCreatingNotebook) return
+    setIsCreatingNotebook(true)
     try {
       const res = await apiFetch('/api/notebooks', {
         method: 'POST',
@@ -105,31 +127,68 @@ function DashboardPage() {
     } catch (err) {
       console.error('Failed to create notebook:', err)
       toast({ type: 'error', message: `Failed to create notebook: ${err.message}` })
+    } finally {
+      setIsCreatingNotebook(false)
     }
-  }, [toast])
+  }, [isCreatingNotebook, toast])
 
   const handleOpenNotebook = useCallback(async (id) => {
     setActiveNotebookId(id)
     setSearchQuery('')
     try {
-      const res = await apiFetch(`/api/documents?notebookId=${encodeURIComponent(id)}`)
-      if (res.ok) {
-        const docs = await res.json()
-        setNotebooks((prev) =>
-          prev.map((nb) =>
-            nb.id === id
-              ? {
-                  ...nb,
-                  documents: docs.map((d) => ({ id: d.id, title: d.fileName })),
-                }
-              : nb,
-          ),
-        )
-      }
+      const [docsRes, chatRes] = await Promise.all([
+        apiFetch(`/api/documents?notebookId=${encodeURIComponent(id)}`),
+        apiFetch(`/api/chat/notebook/${encodeURIComponent(id)}/history`)
+      ])
+      const docs = docsRes.ok ? await docsRes.json() : []
+      const history = (chatRes.ok ? await chatRes.json() : []).map((msg) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        citations: [],
+        done: true
+      }))
+      setNotebooks((prev) =>
+        prev.map((nb) =>
+          nb.id === id
+            ? {
+                ...nb,
+                documents: docs.map((d) => ({ id: d.id, title: d.fileName, contentType: d.contentType })),
+                chatHistory: history,
+              }
+            : nb,
+        ),
+      )
     } catch (err) {
-      console.error('Failed to fetch documents:', err)
+      console.error('Failed to fetch notebook data:', err)
     }
   }, [])
+
+  // Fetch notebooks from database on mount
+  useEffect(() => {
+    async function fetchNotebooks() {
+      try {
+        const res = await apiFetch('/api/notebooks')
+        if (res.ok) {
+          const data = await res.json()
+          setNotebooks(
+            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
+          )
+          const storedId = localStorage.getItem('active_notebook_id')
+          if (storedId && data.some(n => n.id === storedId)) {
+            handleOpenNotebook(storedId)
+          } else if (storedId) {
+            setActiveNotebookId(null)
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch notebooks:', err)
+      } finally {
+        setIsLoadingNotebooks(false)
+      }
+    }
+    fetchNotebooks()
+  }, [handleOpenNotebook])
 
   const handleRenameNotebook = useCallback(async (id, newTitle) => {
     try {
@@ -204,6 +263,7 @@ function DashboardPage() {
         const newDocs = returnedDocs.map((d) => ({
           id: d.id,
           title: d.fileName,
+          contentType: d.contentType,
         }))
 
         setNotebooks((prev) =>
@@ -221,6 +281,38 @@ function DashboardPage() {
       }
     },
     [activeNotebookId],
+  )
+
+  const handleAddUrl = useCallback(
+    async (url) => {
+      if (!activeNotebookId) return
+      try {
+        const response = await apiFetch('/api/documents/ingest-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, notebookId: activeNotebookId }),
+        })
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || `Failed: ${response.statusText}`)
+        }
+        const doc = await response.json()
+        setNotebooks((prev) =>
+          prev.map((nb) =>
+            nb.id === activeNotebookId
+              ? { ...nb, documents: [...nb.documents, { id: doc.id, title: doc.fileName, contentType: doc.contentType }] }
+              : nb,
+          ),
+        )
+        toast({ type: 'success', message: 'Source added successfully' })
+        return true
+      } catch (error) {
+        console.error(error)
+        toast({ type: 'error', message: `Failed to add source: ${error.message}` })
+        return false
+      }
+    },
+    [activeNotebookId, toast],
   )
 
   const handleRemoveDocument = useCallback((docId) => {
@@ -258,7 +350,7 @@ function DashboardPage() {
   // ------- Chat (streaming SSE) -------
 
   const handleSendMessage = useCallback(
-    async (text, streamingMsgId) => {
+    async (text, model, streamingMsgId) => {
       if (!activeNotebookId) return
 
       const notebookIdAtSend = activeNotebookId
@@ -294,7 +386,7 @@ function DashboardPage() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ query: text, notebookId: notebookIdAtSend }),
+          body: JSON.stringify({ query: text, notebookId: notebookIdAtSend, model }),
         })
 
         if (!res.ok) throw new Error(`Stream failed: ${res.status}`)
@@ -363,26 +455,47 @@ function DashboardPage() {
         onCreateNotebook={handleCreateNotebook}
         onGoHome={handleGoHome}
         onLogout={handleLogout}
+        isCreatingNotebook={isCreatingNotebook}
       />
 
       {activeNotebook ? (
-        <>
-          <NotebookWorkspace
-            notebook={activeNotebook}
-            onBack={handleGoHome}
-            onOpenUpload={() => setShowUploadModal(true)}
-            onRemoveDocument={handleRemoveDocument}
-            onSendMessage={handleSendMessage}
-            onRenameNotebook={handleRenameNotebook}
-          />
+        <div className="flex h-[calc(100svh-4rem)] relative">
+          <div 
+            className={`shrink-0 border-r border-[#242424] transition-[width] duration-300 ${isDragging ? 'transition-none' : ''}`}
+            style={{ width: isSidebarCollapsed ? 64 : sidebarWidth }}
+          >
+            <DocumentSidebar
+              notebook={activeNotebook}
+              isCollapsed={isSidebarCollapsed}
+              onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              onBack={handleGoHome}
+              onOpenUpload={() => setShowUploadModal(true)}
+              onRemoveDocument={handleRemoveDocument}
+              onRenameNotebook={handleRenameNotebook}
+            />
+          </div>
+          {!isSidebarCollapsed && (
+            <div 
+              className="w-1 cursor-col-resize hover:bg-[#dffdee]/50 active:bg-[#b9f7d3] shrink-0 z-10 transition-colors"
+              onMouseDown={() => setIsDragging(true)}
+            />
+          )}
+          <div className="flex-1 overflow-hidden">
+            <ChatArena
+              chatHistory={activeNotebook.chatHistory || []}
+              onSendMessage={handleSendMessage}
+              onRenameNotebook={handleRenameNotebook}
+            />
+          </div>
 
           {showUploadModal && (
             <UploadModal
               onClose={() => setShowUploadModal(false)}
               onUpload={handleUploadFiles}
+              onAddUrl={handleAddUrl}
             />
           )}
-        </>
+        </div>
       ) : (
         <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
           <div className="overflow-hidden rounded-[10px] border border-[#242424] bg-[#0d0d0d]">
@@ -393,6 +506,7 @@ function DashboardPage() {
               onCreateNotebook={handleCreateNotebook}
               onRenameNotebook={handleRenameNotebook}
               onDeleteNotebook={handleDeleteNotebook}
+              isCreatingNotebook={isCreatingNotebook}
             />
           </div>
         </section>

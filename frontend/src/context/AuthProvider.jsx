@@ -56,6 +56,15 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function mutateAuth() {
+    try {
+      const session = await getCurrentSession()
+      setUser(session.authenticated ? session.user : null)
+    } catch {
+      setUser(null)
+    }
+  }
+
   const value = useMemo(
     () => ({
       authReady,
@@ -63,6 +72,7 @@ export function AuthProvider({ children }) {
       login,
       logout,
       signup,
+      mutateAuth,
       user,
     }),
     [authReady, user],

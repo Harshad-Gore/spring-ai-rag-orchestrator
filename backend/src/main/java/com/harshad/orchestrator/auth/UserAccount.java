@@ -39,6 +39,9 @@ public class UserAccount {
 	@Column(name = "password_hash", nullable = false)
 	private String passwordHash;
 
+	@Column(name = "avatar_url", length = 1024)
+	private String avatarUrl;
+
 	@Enumerated(EnumType.STRING)
 	@Column(name = "role", nullable = false, length = 32)
 	private UserRole role = UserRole.USER;
@@ -76,6 +79,10 @@ public class UserAccount {
 		return fullName;
 	}
 
+	public void setFullName(String fullName) {
+		this.fullName = fullName;
+	}
+
 	public String getPasswordHash() {
 		return passwordHash;
 	}
@@ -102,5 +109,13 @@ public class UserAccount {
 
 	public void setPasswordHash(String passwordHash) {
 		this.passwordHash = passwordHash;
+	}
+
+	public String getAvatarUrl() {
+		return avatarUrl;
+	}
+
+	public void setAvatarUrl(String avatarUrl) {
+		this.avatarUrl = avatarUrl;
 	}
 }

@@ -6,6 +6,7 @@ import DashboardPage from './pages/DashboardPage.jsx'
 import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
+import SettingsPage from './pages/SettingsPage.jsx'
 
 function AuthLoadingScreen() {
   return (
@@ -75,6 +76,14 @@ function App() {
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute>
+            <SettingsPage />
           </ProtectedRoute>
         }
       />
