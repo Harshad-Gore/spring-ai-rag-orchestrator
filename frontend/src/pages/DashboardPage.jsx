@@ -53,6 +53,7 @@ function DashboardPage() {
   const [isDragging, setIsDragging] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(true)
+  const [isLoadingNotebook, setIsLoadingNotebook] = useState(false)
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false)
   const [confirmConfig, setConfirmConfig] = useState({
     isOpen: false,
@@ -135,6 +136,7 @@ function DashboardPage() {
   const handleOpenNotebook = useCallback(async (id) => {
     setActiveNotebookId(id)
     setSearchQuery('')
+    setIsLoadingNotebook(true)
     try {
       const [docsRes, chatRes] = await Promise.all([
         apiFetch(`/api/documents?notebookId=${encodeURIComponent(id)}`),
@@ -161,6 +163,8 @@ function DashboardPage() {
       )
     } catch (err) {
       console.error('Failed to fetch notebook data:', err)
+    } finally {
+      setIsLoadingNotebook(false)
     }
   }, [])
 
@@ -456,10 +460,14 @@ function DashboardPage() {
         onGoHome={handleGoHome}
         onLogout={handleLogout}
         isCreatingNotebook={isCreatingNotebook}
+        isLoading={isLoadingNotebook}
       />
 
       {activeNotebook ? (
-        <div className="flex h-[calc(100svh-4rem)] relative">
+        <div
+          key={activeNotebook.id}
+          className="flex h-[calc(100svh-4rem)] relative animate-fade-in"
+        >
           <div 
             className={`shrink-0 border-r border-[#242424] transition-[width] duration-300 ${isDragging ? 'transition-none' : ''}`}
             style={{ width: isSidebarCollapsed ? 64 : sidebarWidth }}

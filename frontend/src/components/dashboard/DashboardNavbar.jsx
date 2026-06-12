@@ -24,6 +24,7 @@ function DashboardNavbar({
   onSearchChange,
   searchValue,
   isSettingsPage = false,
+  isLoading = false,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -47,6 +48,11 @@ function DashboardNavbar({
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#242424] bg-[#090909]/95 backdrop-blur-md">
+      {isLoading && (
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] overflow-hidden">
+          <div className="h-full w-full animate-loading-bar bg-gradient-to-r from-transparent via-[#58d68d] to-transparent" />
+        </div>
+      )}
       <div className="flex h-14 w-full items-center gap-4 px-4 sm:px-5">
         {/* Mobile hamburger */}
         <Button

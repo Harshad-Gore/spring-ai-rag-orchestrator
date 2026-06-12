@@ -55,11 +55,13 @@ const MD_COMPONENTS = {
 // ---------------------------------------------------------------------------
 // Single message bubble
 // ---------------------------------------------------------------------------
-const MessageBubble = memo(function MessageBubble({ msg, isStreaming }) {
+const MessageBubble = memo(function MessageBubble({ msg, isStreaming, fadeIn = false, fadeDelay = 0 }) {
   const isUser = msg.role === 'user'
-
   return (
-    <div className={['flex gap-3 group', isUser ? 'justify-end' : 'justify-start'].join(' ')}>
+    <div
+      className={['flex gap-3 group', isUser ? 'justify-end' : 'justify-start', fadeIn ? 'animate-fade-in' : ''].join(' ')}
+      style={fadeIn ? { animationDelay: `${fadeDelay}ms` } : undefined}
+    >
       {/* Avatar — assistant side */}
       {!isUser && (
         <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1e3a28] to-[#0e1f16] border border-[#2a4a34] mt-0.5 shadow-[0_0_12px_rgba(94,234,141,0.08)]">
@@ -158,6 +160,9 @@ function ChatArena({ chatHistory, onSendMessage }) {
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const modelDropdownRef = useRef(null)
+  const isInitialLoad = useRef(true)
+  const initialHistoryLength = useRef(0)
+  const [historyReady, setHistoryReady] = useState(false)
 
   // Auto-resize textarea to fit content
   useEffect(() => {
@@ -182,7 +187,20 @@ function ChatArena({ chatHistory, onSendMessage }) {
   }, [selectedModel])
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (!chatEndRef.current) return
+    if (isInitialLoad.current) {
+      if (chatHistory.length === 0) {
+        isInitialLoad.current = false
+        setHistoryReady(true)
+        return
+      }
+      chatEndRef.current.scrollIntoView({ behavior: 'instant' })
+      initialHistoryLength.current = chatHistory.length
+      isInitialLoad.current = false
+      setHistoryReady(true)
+      return
+    }
+    chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
   }, [chatHistory, isThinking, isStreaming])
 
   const handleSend = useCallback(async () => {
@@ -191,6 +209,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
 
     setInputValue('')
     setIsThinking(true)
+    if (inputRef.current) inputRef.current.style.height = 'auto'
     if (inputRef.current) inputRef.current.style.height = 'auto'
 
     const msgId = `stream-${Date.now()}`
@@ -262,15 +281,16 @@ function ChatArena({ chatHistory, onSendMessage }) {
           </div>
         ) : (
           <div className="mx-auto max-w-4xl space-y-6">
-            {chatHistory.map((msg) => {
-              // Hide the empty placeholder while we are in the initial 'Thinking' state
+            {historyReady && chatHistory.map((msg, i) => {
               if (isThinking && msg.id === streamingMsgId && !msg.content) return null
-
+              const isLoaded = i < initialHistoryLength.current
               return (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
                   isStreaming={isStreaming && msg.id === streamingMsgId}
+                  fadeIn={isLoaded}
+                  fadeDelay={isLoaded ? Math.min(i * 40, 400) : 0}
                 />
               )
             })}

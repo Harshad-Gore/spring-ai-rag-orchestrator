@@ -155,11 +155,12 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
           </div>
         ) : (
           <ul className="space-y-1 py-1">
-            {documents.map((doc) => (
+            {documents.map((doc, i) => (
               <li
                 key={doc.id}
                 title={doc.title}
-                className={`group flex items-center rounded-lg transition hover:bg-white/[0.04] ${isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2.5'}`}
+                style={{ animationDelay: `${i * 40}ms` }}
+                className={`animate-fade-in group flex items-center rounded-lg transition hover:bg-white/[0.04] ${isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2.5'}`}
               >
                 {getDocIcon(doc)}
                 {!isCollapsed && (
