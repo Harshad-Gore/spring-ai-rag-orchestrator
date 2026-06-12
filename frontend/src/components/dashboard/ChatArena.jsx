@@ -155,9 +155,21 @@ function ChatArena({ chatHistory, onSendMessage }) {
   const [isThinking, setIsThinking] = useState(false)         // waiting for first token
   const [isStreaming, setIsStreaming] = useState(false)        // tokens arriving
   const [streamingMsgId, setStreamingMsgId] = useState(null)
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
   const chatEndRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
+  const modelDropdownRef = useRef(null)
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
+        setIsModelDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   useEffect(() => {
     localStorage.setItem('selected_model', selectedModel)
@@ -268,16 +280,45 @@ function ChatArena({ chatHistory, onSendMessage }) {
       <div className="shrink-0 border-t border-[#1a1a1a] bg-[#080908] px-4 py-3 sm:px-8">
         <div className="mx-auto max-w-4xl flex items-center gap-2 pb-2">
           <span className="text-[10px] font-medium uppercase tracking-wider text-[#657069]">Model</span>
-          <select
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            className="appearance-none cursor-pointer rounded-lg border border-[#242424] bg-[#111] px-3 py-1.5 pr-7 text-xs font-medium text-[#c8cdc9] outline-none transition hover:border-[#3a3a3a] focus:border-[#2a4a34] focus:ring-1 focus:ring-[#58d68d]/20"
-            aria-label="Select AI model"
-          >
-            {GROQ_MODELS.map(m => (
-              <option key={m.id} value={m.id}>{m.label} — {m.tag}</option>
-            ))}
-          </select>
+          <div className="relative" ref={modelDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+              className="flex items-center gap-2 appearance-none cursor-pointer rounded-lg border border-[#242424] bg-[#111] px-3 py-1.5 text-xs font-medium text-[#c8cdc9] outline-none transition hover:border-[#3a3a3a] focus:border-[#2a4a34] focus:ring-1 focus:ring-[#58d68d]/20"
+            >
+              {GROQ_MODELS.find(m => m.id === selectedModel)?.label} — {GROQ_MODELS.find(m => m.id === selectedModel)?.tag}
+              <ChevronDown className={`size-3.5 text-[#657069] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+            
+            {isModelDropdownOpen && (
+              <div className="absolute left-0 bottom-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-[#242424] bg-[#0f1210] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                <div className="p-1.5 space-y-0.5">
+                  {GROQ_MODELS.map(m => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedModel(m.id)
+                        setIsModelDropdownOpen(false)
+                      }}
+                      className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${
+                        selectedModel === m.id
+                          ? 'bg-[#1a2e21] text-[#58d68d] font-medium'
+                          : 'text-[#c8cdc9] hover:bg-[#161a17] hover:text-[#f0fdf4]'
+                      }`}
+                    >
+                      {m.label}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+                        selectedModel === m.id ? 'bg-[#58d68d]/20 text-[#58d68d]' : 'bg-[#1a1a1a] text-[#657069]'
+                      }`}>
+                        {m.tag}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <form
           onSubmit={(e) => { e.preventDefault(); handleSend() }}
