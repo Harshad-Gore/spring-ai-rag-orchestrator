@@ -1,10 +1,12 @@
 package com.harshad.orchestrator.chat;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -16,6 +18,7 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import com.harshad.orchestrator.document.DocumentChunk;
@@ -27,6 +30,11 @@ import reactor.core.publisher.Flux;
 public class ChatService {
 
 	private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+
+	/** Maximum conversation turns (user+assistant pairs) fed to the LLM. */
+	private static final int WINDOW_MESSAGES = 10;
+	/** How many recent messages are given to the query condenser. */
+	private static final int CONDENSER_CONTEXT = 6;
 
 	private final ChatClient chatClient;
 	private final DocumentChunkRepository chunkRepository;
@@ -47,11 +55,21 @@ public class ChatService {
 		return chatMessageRepository.findByNotebookIdOrderByCreatedAtAsc(notebookId);
 	}
 
+	private List<ChatMessage> getRecentHistory(UUID notebookId, int limit) {
+		List<ChatMessage> desc = chatMessageRepository.findRecentByNotebookId(
+				notebookId, PageRequest.of(0, limit));
+		Collections.reverse(desc); // back to chronological order
+		return desc;
+	}
+
 	/** Non-streaming: used by the classic /ask endpoint */
 	public ChatResponse ask(String query, UUID notebookId, String modelOverride) {
+		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
+		String searchQuery = condenseQuery(query, recentHistory);
+
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, query);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery);
 		List<Message> springMessages = buildMessageHistory(notebookId, chunks);
 		String modelUsed = resolveModel(modelOverride);
 
@@ -64,9 +82,12 @@ public class ChatService {
 
 	/** Streaming: returns token-by-token Flux for the /stream endpoint */
 	public StreamContext prepareStream(String query, UUID notebookId, String modelOverride) {
+		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
+		String searchQuery = condenseQuery(query, recentHistory);
+
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, query);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery);
 		List<Message> springMessages = buildMessageHistory(notebookId, chunks);
 		List<Citation> citations = buildCitations(chunks);
 		String modelUsed = resolveModel(modelOverride);
@@ -97,12 +118,10 @@ public class ChatService {
 
 	private List<Message> buildMessageHistory(UUID notebookId, List<DocumentChunk> currentChunks) {
 		List<Message> messages = new ArrayList<>();
-
-		// 1. System message with document context
 		messages.add(new SystemMessage(buildSystemPrompt(currentChunks)));
 
-		// 2. Conversation history (including the just-saved user message)
-		List<ChatMessage> history = getHistory(notebookId);
+		// Sliding window — last WINDOW_MESSAGES rows, oldest-first
+		List<ChatMessage> history = getRecentHistory(notebookId, WINDOW_MESSAGES);
 		for (ChatMessage msg : history) {
 			if (msg.getRole() == ChatMessage.Role.USER) {
 				messages.add(new UserMessage(msg.getContent()));
@@ -110,8 +129,50 @@ public class ChatService {
 				messages.add(new AssistantMessage(msg.getContent()));
 			}
 		}
-
 		return messages;
+	}
+
+
+
+	/**
+	 * Rewrites a vague follow-up into a standalone search query using recent history.
+	 * Skipped entirely on the first message. Each message is capped at 200 chars
+	 * so the condenser prompt stays small regardless of conversation length.
+	 * Runs via CompletableFuture so it doesn't block the server thread.
+	 */
+	private String condenseQuery(String rawQuery, List<ChatMessage> recentHistory) {
+		if (recentHistory.isEmpty()) return rawQuery;
+		try {
+			String historyText = recentHistory.stream()
+					.map(m -> {
+						String c = m.getContent();
+						return m.getRole().name() + ": " + (c.length() > 200 ? c.substring(0, 200) : c);
+					})
+					.collect(Collectors.joining("\n"));
+
+			String prompt = """
+					Given the conversation history and a follow-up question, rewrite the \
+					follow-up into a single self-contained search query. \
+					Output ONLY the rewritten query, nothing else.
+
+					History:
+					%s
+
+					Follow-up: %s
+					Standalone query:""".formatted(historyText, rawQuery);
+
+			String condensed = CompletableFuture.supplyAsync(() ->
+				chatClient.prompt()
+						.messages(List.of(new UserMessage(prompt)))
+						.call()
+						.content()
+			).get();
+
+			return (condensed != null && !condensed.isBlank()) ? condensed.strip() : rawQuery;
+		} catch (Exception e) {
+			log.warn("Query condensation failed, falling back to raw query: {}", e.getMessage());
+			return rawQuery;
+		}
 	}
 
 	private List<DocumentChunk> resolveChunks(UUID notebookId, String query) {

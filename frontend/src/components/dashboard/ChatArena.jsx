@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import { Bot, ChevronDown, Loader2, Send, Sparkles, User } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -22,10 +22,40 @@ function ElapsedTimer({ isActive }) {
   return <span className="text-[10px] tabular-nums text-[#657069]">{elapsed}s</span>
 }
 
+// Defined outside component — never recreated on re-render
+const MD_COMPONENTS = {
+  h1: ({node, ...props}) => <h3 className="mt-4 mb-2 text-lg font-semibold text-white" {...props} />,
+  h2: ({node, ...props}) => <h4 className="mt-4 mb-2 text-base font-semibold text-[#dffdee]/90" {...props} />,
+  h3: ({node, ...props}) => <h5 className="mt-3 mb-1.5 text-sm font-medium text-[#dffdee]/80" {...props} />,
+  p:  ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
+  ul: ({node, ...props}) => <ul className="mb-3 space-y-1 pl-5 list-disc marker:text-[#dffdee]/40" {...props} />,
+  ol: ({node, ...props}) => <ol className="mb-3 space-y-1 pl-5 list-decimal marker:text-[#dffdee]/40" {...props} />,
+  li: ({node, ...props}) => <li {...props} />,
+  strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
+  em: ({node, ...props}) => <em className="italic text-[#d8f3e8]" {...props} />,
+  code: ({node, inline, className, children, ...props}) => {
+    const match = /language-(\w+)/.exec(className || '')
+    return inline ? (
+      <code className="rounded-md bg-[#1a2a1f] px-1.5 py-0.5 font-mono text-[13px] text-[#7ef2b0]" {...props}>{children}</code>
+    ) : (
+      <div className="mb-4 overflow-hidden rounded-lg border border-[#242424] bg-[#0d0d0d]">
+        {match && <div className="bg-[#141414] px-4 py-1.5 text-xs font-medium text-[#657069] border-b border-[#242424]">{match[1]}</div>}
+        <pre className="overflow-x-auto p-4 text-[13px] leading-6 text-[#e8f5ed] m-0 bg-transparent">
+          <code className="font-mono bg-transparent p-0" {...props}>{children}</code>
+        </pre>
+      </div>
+    )
+  },
+  table: ({node, ...props}) => <div className="mb-4 overflow-x-auto"><table className="min-w-full text-sm border-collapse" {...props} /></div>,
+  th: ({node, ...props}) => <th className="border-b border-[#242424] p-3 text-left font-medium text-[#dffdee]/80" {...props} />,
+  td: ({node, ...props}) => <td className="border-b border-[#242424]/50 p-3" {...props} />,
+  blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-[#58d68d]/30 pl-4 italic text-[#9aa39f] my-3" {...props} />,
+}
+
 // ---------------------------------------------------------------------------
 // Single message bubble
 // ---------------------------------------------------------------------------
-function MessageBubble({ msg, isStreaming }) {
+const MessageBubble = memo(function MessageBubble({ msg, isStreaming }) {
   const isUser = msg.role === 'user'
 
   return (
@@ -47,39 +77,7 @@ function MessageBubble({ msg, isStreaming }) {
           <p className="whitespace-pre-wrap">{msg.content}</p>
         ) : (
           <div className="prose prose-invert prose-p:leading-7 prose-headings:text-white prose-a:text-[#58d68d] max-w-none text-sm text-[#c8cdc9]">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                h1: ({node, ...props}) => <h3 className="mt-4 mb-2 text-lg font-semibold text-white" {...props} />,
-                h2: ({node, ...props}) => <h4 className="mt-4 mb-2 text-base font-semibold text-[#dffdee]/90" {...props} />,
-                h3: ({node, ...props}) => <h5 className="mt-3 mb-1.5 text-sm font-medium text-[#dffdee]/80" {...props} />,
-                p: ({node, ...props}) => <p className="mb-3 last:mb-0" {...props} />,
-                ul: ({node, ...props}) => <ul className="mb-3 space-y-1 pl-5 list-disc marker:text-[#dffdee]/40" {...props} />,
-                ol: ({node, ...props}) => <ol className="mb-3 space-y-1 pl-5 list-decimal marker:text-[#dffdee]/40" {...props} />,
-                li: ({node, ...props}) => <li className="" {...props} />,
-                strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
-                em: ({node, ...props}) => <em className="italic text-[#d8f3e8]" {...props} />,
-                code: ({node, inline, className, children, ...props}) => {
-                  const match = /language-(\w+)/.exec(className || '')
-                  return inline ? (
-                    <code className="rounded-md bg-[#1a2a1f] px-1.5 py-0.5 font-mono text-[13px] text-[#7ef2b0]" {...props}>
-                      {children}
-                    </code>
-                  ) : (
-                    <div className="mb-4 overflow-hidden rounded-lg border border-[#242424] bg-[#0d0d0d]">
-                      {match && <div className="bg-[#141414] px-4 py-1.5 text-xs font-medium text-[#657069] border-b border-[#242424]">{match[1]}</div>}
-                      <pre className="overflow-x-auto p-4 text-[13px] leading-6 text-[#e8f5ed] m-0 bg-transparent">
-                        <code className="font-mono bg-transparent p-0" {...props}>{children}</code>
-                      </pre>
-                    </div>
-                  )
-                },
-                table: ({node, ...props}) => <div className="mb-4 overflow-x-auto"><table className="min-w-full text-sm border-collapse" {...props} /></div>,
-                th: ({node, ...props}) => <th className="border-b border-[#242424] p-3 text-left font-medium text-[#dffdee]/80" {...props} />,
-                td: ({node, ...props}) => <td className="border-b border-[#242424]/50 p-3" {...props} />,
-                blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-[#58d68d]/30 pl-4 italic text-[#9aa39f] my-3" {...props} />
-              }}
-            >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
               {msg.content + (isStreaming ? ' ▍' : '')}
             </ReactMarkdown>
           </div>
@@ -104,7 +102,7 @@ function MessageBubble({ msg, isStreaming }) {
       )}
     </div>
   )
-}
+})
 
 // ---------------------------------------------------------------------------
 // Thinking indicator shown before first token arrives
@@ -161,6 +159,14 @@ function ChatArena({ chatHistory, onSendMessage }) {
   const abortRef = useRef(null)
   const modelDropdownRef = useRef(null)
 
+  // Auto-resize textarea to fit content
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = el.scrollHeight + 'px'
+  }, [inputValue])
+
   useEffect(() => {
     function handleClickOutside(e) {
       if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target)) {
@@ -185,6 +191,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
 
     setInputValue('')
     setIsThinking(true)
+    if (inputRef.current) inputRef.current.style.height = 'auto'
 
     const msgId = `stream-${Date.now()}`
     setStreamingMsgId(msgId)
@@ -333,7 +340,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
               placeholder={isBusy ? 'Generating response…' : 'Ask about your sources…'}
               disabled={isBusy}
               rows={1}
-              className="block max-h-36 min-h-[46px] w-full resize-none rounded-xl border border-white/[0.08] bg-[#0f1210]/95 px-4 py-3 text-sm font-medium text-[#f0fdf4] caret-[#58d68d] outline-none transition placeholder:text-[#4a5a4e] focus:border-[#2a4a34] focus:bg-[#0d1510] focus:ring-2 focus:ring-[#58d68d]/10 disabled:cursor-not-allowed disabled:opacity-50"
+              className="block max-h-48 min-h-[46px] w-full resize-none overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0f1210]/95 px-4 py-3 text-sm font-medium text-[#f0fdf4] caret-[#58d68d] outline-none transition placeholder:text-[#4a5a4e] focus:border-[#2a4a34] focus:bg-[#0d1510] focus:ring-2 focus:ring-[#58d68d]/10 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
 
