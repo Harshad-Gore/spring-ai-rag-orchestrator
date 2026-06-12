@@ -94,7 +94,7 @@ public class ChatController {
 					log.error("Stream error: {}", ex.getMessage(), ex);
 					return Flux.just(ServerSentEvent.<String>builder()
 						.event("error")
-						.data("Stream interrupted. Please try again.")
+						.data("Stream error: " + ex.getMessage())
 						.build());
 				});
 
