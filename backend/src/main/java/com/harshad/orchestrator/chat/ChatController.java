@@ -40,8 +40,9 @@ public class ChatController {
 	@PostMapping("/ask")
 	public ResponseEntity<ChatResponse> ask(@RequestBody ChatRequest request) {
 		try {
+			List<UUID> pinned = parsePinned(request.pinnedDocIds());
 			ChatResponse response = chatService.ask(
-				request.query(), UUID.fromString(request.notebookId()), request.model());
+				request.query(), UUID.fromString(request.notebookId()), request.model(), pinned);
 			return ResponseEntity.ok(response);
 		} catch (Exception ex) {
 			log.error("Chat error for notebook {}: {}", request.notebookId(), ex.getMessage(), ex);
@@ -60,8 +61,9 @@ public class ChatController {
 	@PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	public Flux<ServerSentEvent<String>> stream(@RequestBody ChatRequest request) {
 		try {
+			List<UUID> pinned = parsePinned(request.pinnedDocIds());
 			StreamContext ctx = chatService.prepareStream(
-				request.query(), UUID.fromString(request.notebookId()), request.model());
+				request.query(), UUID.fromString(request.notebookId()), request.model(), pinned);
 
 			Flux<ServerSentEvent<String>> tokenEvents = ctx.tokenStream()
 				.map(token -> {
@@ -128,6 +130,11 @@ public class ChatController {
 		} catch (Exception e) {
 			return "[]";
 		}
+	}
+
+	private List<UUID> parsePinned(List<String> ids) {
+		if (ids == null || ids.isEmpty()) return List.of();
+		return ids.stream().map(UUID::fromString).toList();
 	}
 
 	public record ChatMessageDto(String id, String role, String content, String modelUsed, String createdAt) {}

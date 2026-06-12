@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, memo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, memo } from 'react'
 import { Bot, ChevronDown, Loader2, Send, Sparkles, User } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -147,7 +147,7 @@ const GROQ_MODELS = [
   { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', tag: 'Efficient', tagColor: '#eb984e' },
 ]
 
-function ChatArena({ chatHistory, onSendMessage }) {
+function ChatArena({ chatHistory, onSendMessage, pinnedDocIds, isLoading = false }) {
   const [inputValue, setInputValue] = useState('')
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem('selected_model') || GROQ_MODELS[0].id
@@ -160,9 +160,6 @@ function ChatArena({ chatHistory, onSendMessage }) {
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const modelDropdownRef = useRef(null)
-  const isInitialLoad = useRef(true)
-  const initialHistoryLength = useRef(0)
-  const [historyReady, setHistoryReady] = useState(false)
 
   // Auto-resize textarea to fit content
   useEffect(() => {
@@ -186,21 +183,55 @@ function ChatArena({ chatHistory, onSendMessage }) {
     localStorage.setItem('selected_model', selectedModel)
   }, [selectedModel])
 
+  const chatScrollRef = useRef(null)
+  const isInitialLoad = useRef(true)
+  const initialHistoryLength = useRef(0)
+  const [historyReady, setHistoryReady] = useState(false)
+  const [scrollReady, setScrollReady] = useState(false)
+  const scrollRef = useRef(null)
+
+  // Reset when a new notebook is opened (isLoading flips true)
   useEffect(() => {
-    if (!chatEndRef.current) return
-    if (isInitialLoad.current) {
-      if (chatHistory.length === 0) {
-        isInitialLoad.current = false
-        setHistoryReady(true)
-        return
-      }
-      chatEndRef.current.scrollIntoView({ behavior: 'instant' })
+    if (isLoading) {
+      isInitialLoad.current = true
+      setHistoryReady(false)
+      setScrollReady(false)
+    }
+  }, [isLoading])
+
+  // Jump to bottom instantly once history is ready
+  useLayoutEffect(() => {
+    if (!historyReady) return
+    if (chatScrollRef.current) {
+      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    }
+    setScrollReady(true)
+  }, [historyReady])
+
+  // Gate rendering once history arrives or notebook is empty
+  useEffect(() => {
+    if (!isInitialLoad.current) return
+    if (isLoading) return
+    if (chatHistory.length > 0) {
       initialHistoryLength.current = chatHistory.length
       isInitialLoad.current = false
       setHistoryReady(true)
       return
     }
-    chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    clearTimeout(scrollRef.current)
+    scrollRef.current = setTimeout(() => {
+      if (isInitialLoad.current) {
+        isInitialLoad.current = false
+        setHistoryReady(true)
+        setScrollReady(true)
+      }
+    }, 300)
+  }, [chatHistory, isLoading])
+
+  // Smooth scroll for new messages after initial load
+  useEffect(() => {
+    if (isInitialLoad.current) return
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatHistory, isThinking, isStreaming])
 
   const handleSend = useCallback(async () => {
@@ -209,7 +240,6 @@ function ChatArena({ chatHistory, onSendMessage }) {
 
     setInputValue('')
     setIsThinking(true)
-    if (inputRef.current) inputRef.current.style.height = 'auto'
     if (inputRef.current) inputRef.current.style.height = 'auto'
 
     const msgId = `stream-${Date.now()}`
@@ -251,7 +281,7 @@ function ChatArena({ chatHistory, onSendMessage }) {
       `}</style>
 
       {/* ── Chat history ─────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto scroll-smooth px-4 py-6 sm:px-8">
+      <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
         {isEmpty && !isBusy ? (
           /* Empty state */
           <div className="flex h-full items-center justify-center">
@@ -283,14 +313,14 @@ function ChatArena({ chatHistory, onSendMessage }) {
           <div className="mx-auto max-w-4xl space-y-6">
             {historyReady && chatHistory.map((msg, i) => {
               if (isThinking && msg.id === streamingMsgId && !msg.content) return null
-              const isLoaded = i < initialHistoryLength.current
+              const isLast = i === initialHistoryLength.current - 1
               return (
                 <MessageBubble
                   key={msg.id}
                   msg={msg}
                   isStreaming={isStreaming && msg.id === streamingMsgId}
-                  fadeIn={isLoaded}
-                  fadeDelay={isLoaded ? Math.min(i * 40, 400) : 0}
+                  fadeIn={isLast && initialHistoryLength.current > 0}
+                  fadeDelay={0}
                 />
               )
             })}

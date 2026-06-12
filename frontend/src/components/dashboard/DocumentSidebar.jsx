@@ -17,7 +17,7 @@ function getInitials(title) {
   return title.slice(0, 2).toUpperCase()
 }
 
-function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook }) {
+function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook, pinnedDocIds, onTogglePin }) {
   const documents = notebook?.documents ?? []
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(notebook?.title ?? '')
@@ -168,6 +168,24 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
                     <span className="min-w-0 flex-1 truncate text-sm text-[#c8cdc9]">
                       {doc.title}
                     </span>
+                    {/* Pin checkbox */}
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onTogglePin(doc.id) }}
+                      title={pinnedDocIds.has(doc.id) ? 'Unpin from context' : 'Pin to context'}
+                      className={`flex size-4 shrink-0 items-center justify-center rounded border transition mr-1 focus:outline-none ${
+                        pinnedDocIds.has(doc.id)
+                          ? 'border-[#58d68d] bg-[#58d68d]/20 text-[#58d68d]'
+                          : 'border-[#333] bg-transparent text-transparent hover:border-[#58d68d]/50'
+                      }`}
+                      aria-label={pinnedDocIds.has(doc.id) ? `Unpin ${doc.title}` : `Pin ${doc.title}`}
+                    >
+                      {pinnedDocIds.has(doc.id) && (
+                        <svg viewBox="0 0 10 10" className="size-2.5" fill="none">
+                          <path d="M1.5 5.5L4 8l4.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}

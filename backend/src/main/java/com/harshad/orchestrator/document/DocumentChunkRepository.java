@@ -13,6 +13,8 @@ public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, UU
 
 	List<DocumentChunk> findByNotebookId(UUID notebookId);
 
+	List<DocumentChunk> findByDocumentIdIn(List<UUID> documentIds);
+
 	void deleteByDocumentId(UUID documentId);
 
 	@Query(value = """

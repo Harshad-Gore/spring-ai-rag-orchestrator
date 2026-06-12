@@ -54,6 +54,7 @@ function DashboardPage() {
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(true)
   const [isLoadingNotebook, setIsLoadingNotebook] = useState(false)
+  const [pinnedDocIds, setPinnedDocIds] = useState(() => new Set())
   const [isCreatingNotebook, setIsCreatingNotebook] = useState(false)
   const [confirmConfig, setConfirmConfig] = useState({
     isOpen: false,
@@ -161,6 +162,8 @@ function DashboardPage() {
             : nb,
         ),
       )
+      // Default all docs pinned
+      setPinnedDocIds(new Set(docs.map((d) => d.id)))
     } catch (err) {
       console.error('Failed to fetch notebook data:', err)
     } finally {
@@ -238,6 +241,20 @@ function DashboardPage() {
       }
     })
   }, [activeNotebookId, toast])
+
+  const handleTogglePin = useCallback((docId) => {
+    setPinnedDocIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(docId)) {
+        // Keep at least one pinned
+        if (next.size === 1) return prev
+        next.delete(docId)
+      } else {
+        next.add(docId)
+      }
+      return next
+    })
+  }, [])
 
   const handleGoHome = useCallback(() => {
     setActiveNotebookId(null)
@@ -358,6 +375,7 @@ function DashboardPage() {
       if (!activeNotebookId) return
 
       const notebookIdAtSend = activeNotebookId
+      const pinnedAtSend = [...pinnedDocIds]
 
       // Add user message + empty AI placeholder immediately
       const userMsg = { id: uid(), role: 'user', content: text, citations: [] }
@@ -390,7 +408,7 @@ function DashboardPage() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ query: text, notebookId: notebookIdAtSend, model }),
+          body: JSON.stringify({ query: text, notebookId: notebookIdAtSend, model, pinnedDocIds: pinnedAtSend }),
         })
 
         if (!res.ok) throw new Error(`Stream failed: ${res.status}`)
@@ -439,7 +457,7 @@ function DashboardPage() {
         }))
       }
     },
-    [activeNotebookId],
+    [activeNotebookId, pinnedDocIds],
   )
 
   // ------- Auth -------
@@ -480,6 +498,8 @@ function DashboardPage() {
               onOpenUpload={() => setShowUploadModal(true)}
               onRemoveDocument={handleRemoveDocument}
               onRenameNotebook={handleRenameNotebook}
+              pinnedDocIds={pinnedDocIds}
+              onTogglePin={handleTogglePin}
             />
           </div>
           {!isSidebarCollapsed && (
@@ -492,7 +512,9 @@ function DashboardPage() {
             <ChatArena
               chatHistory={activeNotebook.chatHistory || []}
               onSendMessage={handleSendMessage}
+              pinnedDocIds={pinnedDocIds}
               onRenameNotebook={handleRenameNotebook}
+              isLoading={isLoadingNotebook}
             />
           </div>
 

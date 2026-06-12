@@ -63,14 +63,15 @@ public class ChatService {
 	}
 
 	/** Non-streaming: used by the classic /ask endpoint */
-	public ChatResponse ask(String query, UUID notebookId, String modelOverride) {
+	public ChatResponse ask(String query, UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
 		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
 		String searchQuery = condenseQuery(query, recentHistory);
 
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery);
-		List<Message> springMessages = buildMessageHistory(notebookId, chunks);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery, pinnedDocIds);
+		List<String> excludedFileNames = resolveExcludedFileNames(notebookId, pinnedDocIds);
+		List<Message> springMessages = buildMessageHistory(notebookId, chunks, excludedFileNames);
 		String modelUsed = resolveModel(modelOverride);
 
 		ChatClient.ChatClientRequestSpec spec = buildSpec(springMessages, modelOverride);
@@ -81,14 +82,15 @@ public class ChatService {
 	}
 
 	/** Streaming: returns token-by-token Flux for the /stream endpoint */
-	public StreamContext prepareStream(String query, UUID notebookId, String modelOverride) {
+	public StreamContext prepareStream(String query, UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
 		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
 		String searchQuery = condenseQuery(query, recentHistory);
 
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery);
-		List<Message> springMessages = buildMessageHistory(notebookId, chunks);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery, pinnedDocIds);
+		List<String> excludedFileNames = resolveExcludedFileNames(notebookId, pinnedDocIds);
+		List<Message> springMessages = buildMessageHistory(notebookId, chunks, excludedFileNames);
 		List<Citation> citations = buildCitations(chunks);
 		String modelUsed = resolveModel(modelOverride);
 
@@ -116,9 +118,9 @@ public class ChatService {
 		return (modelOverride != null && !modelOverride.isBlank()) ? modelOverride : "default";
 	}
 
-	private List<Message> buildMessageHistory(UUID notebookId, List<DocumentChunk> currentChunks) {
+	private List<Message> buildMessageHistory(UUID notebookId, List<DocumentChunk> currentChunks, List<String> excludedFileNames) {
 		List<Message> messages = new ArrayList<>();
-		messages.add(new SystemMessage(buildSystemPrompt(currentChunks)));
+		messages.add(new SystemMessage(buildSystemPrompt(currentChunks, excludedFileNames)));
 
 		// Sliding window — last WINDOW_MESSAGES rows, oldest-first
 		List<ChatMessage> history = getRecentHistory(notebookId, WINDOW_MESSAGES);
@@ -130,6 +132,19 @@ public class ChatService {
 			}
 		}
 		return messages;
+	}
+
+	/**
+	 * Returns file names of documents in this notebook that are NOT pinned.
+	 * Used to explicitly tell the LLM to ignore them even if they appear in history.
+	 */
+	private List<String> resolveExcludedFileNames(UUID notebookId, List<UUID> pinnedDocIds) {
+		if (pinnedDocIds == null || pinnedDocIds.isEmpty()) return List.of();
+		return chunkRepository.findByNotebookId(notebookId).stream()
+				.filter(c -> !pinnedDocIds.contains(c.getDocumentId()))
+				.map(DocumentChunk::getFileName)
+				.distinct()
+				.toList();
 	}
 
 
@@ -175,18 +190,44 @@ public class ChatService {
 		}
 	}
 
-	private List<DocumentChunk> resolveChunks(UUID notebookId, String query) {
-		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndQuery(notebookId, query);
+	private List<DocumentChunk> resolveChunks(UUID notebookId, String query, List<UUID> pinnedDocIds) {
+		boolean hasPinFilter = pinnedDocIds != null && !pinnedDocIds.isEmpty();
+
+		// Full-text search, then immediately filter to pinned docs only
+		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndQuery(notebookId, query)
+				.stream()
+				.filter(c -> !hasPinFilter || pinnedDocIds.contains(c.getDocumentId()))
+				.toList();
+
+		// Fallback: fetch raw chunks restricted to pinned docs (or all if no filter)
 		if (chunks.isEmpty()) {
-			chunks = chunkRepository.findByNotebookId(notebookId);
-			if (chunks.size() > 15) {
-				chunks = chunks.subList(0, 15);
-			}
+			chunks = hasPinFilter
+					? chunkRepository.findByDocumentIdIn(pinnedDocIds)
+					: chunkRepository.findByNotebookId(notebookId);
+			if (chunks.size() > 15) chunks = chunks.subList(0, 15);
 		}
 		return chunks;
 	}
 
-	private String buildSystemPrompt(List<DocumentChunk> chunks) {
+	private String buildSystemPrompt(List<DocumentChunk> chunks, List<String> excludedFileNames) {
+		String exclusionBlock = "";
+		if (!excludedFileNames.isEmpty()) {
+			String fileList = excludedFileNames.stream()
+					.map(f -> "- " + f)
+					.collect(Collectors.joining("\n"));
+			exclusionBlock = """
+
+				===== EXCLUDED SOURCES =====
+				The following sources have been deactivated by the user and must NOT be used.
+				Do not answer questions using content from these sources, even if that content
+				appears in the conversation history. If the user asks about them, tell them
+				the source is currently excluded and they can re-enable it from the sources panel.
+
+				%s
+				===== END EXCLUDED SOURCES =====
+				""".formatted(fileList);
+		}
+
 		if (chunks.isEmpty()) {
 			return """
 				You are a knowledgeable research assistant. No documents have been uploaded to this notebook yet.
@@ -197,7 +238,7 @@ public class ChatService {
 				- If the user asks you to reference uploaded documents, remind them to upload sources first
 				- Be concise but thorough
 				- Format your response using markdown where it improves readability (bold, lists, headers)
-				""";
+				""" + exclusionBlock;
 		}
 
 		String context = chunks.stream()
@@ -220,7 +261,7 @@ public class ChatService {
 			""" + context + """
 
 			===== END CONTEXT =====
-			""";
+			""" + exclusionBlock;
 	}
 
 	private void saveMessage(UUID notebookId, ChatMessage.Role role, String content, String modelUsed) {
@@ -251,7 +292,7 @@ public class ChatService {
 
 	// ── Records ──────────────────────────────────────────────────────────────
 
-	public record ChatRequest(String query, String notebookId, String model) {}
+	public record ChatRequest(String query, String notebookId, String model, List<String> pinnedDocIds) {}
 	public record ChatResponse(String response, List<Citation> citations) {}
 	public record Citation(String source, String excerpt) {}
 	public record StreamContext(Flux<String> tokenStream, List<Citation> citations) {}
