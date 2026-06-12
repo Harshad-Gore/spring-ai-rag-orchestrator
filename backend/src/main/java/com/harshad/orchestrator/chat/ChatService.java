@@ -9,6 +9,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -49,10 +51,27 @@ public class ChatService {
 		this.chatMessageRepository = chatMessageRepository;
 	}
 
+	// ── Internal Types ───────────────────────────────────────────────────────
+
+	public enum Intent { DOC_SEARCH, CHAT_HISTORY, GENERAL }
+	public record QueryAnalysis(Intent intent, String standaloneQuery) {}
+
 	// ── Public API ───────────────────────────────────────────────────────────
 
 	public List<ChatMessage> getHistory(UUID notebookId) {
 		return chatMessageRepository.findByNotebookIdOrderByCreatedAtAsc(notebookId);
+	}
+
+	public void deleteLastInteraction(UUID notebookId) {
+		List<ChatMessage> lastTwo = chatMessageRepository.findRecentByNotebookId(notebookId, PageRequest.of(0, 2));
+		if (lastTwo.isEmpty()) return;
+		
+		if (lastTwo.get(0).getRole() == ChatMessage.Role.ASSISTANT) {
+			chatMessageRepository.delete(lastTwo.get(0));
+			if (lastTwo.size() > 1 && lastTwo.get(1).getRole() == ChatMessage.Role.USER) {
+				chatMessageRepository.delete(lastTwo.get(1));
+			}
+		}
 	}
 
 	private List<ChatMessage> getRecentHistory(UUID notebookId, int limit) {
@@ -65,13 +84,14 @@ public class ChatService {
 	/** Non-streaming: used by the classic /ask endpoint */
 	public ChatResponse ask(String query, UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
 		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
-		String searchQuery = condenseQuery(query, recentHistory);
+		QueryAnalysis analysis = analyzeIntentAndQuery(query, recentHistory);
 
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery, pinnedDocIds);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, analysis, pinnedDocIds);
+		List<ChatMessage> recalledMessages = resolvePastMessages(notebookId, analysis, recentHistory);
 		List<String> excludedFileNames = resolveExcludedFileNames(notebookId, pinnedDocIds);
-		List<Message> springMessages = buildMessageHistory(notebookId, chunks, excludedFileNames);
+		List<Message> springMessages = buildMessageHistory(notebookId, chunks, recalledMessages, excludedFileNames, analysis);
 		String modelUsed = resolveModel(modelOverride);
 
 		ChatClient.ChatClientRequestSpec spec = buildSpec(springMessages, modelOverride);
@@ -84,13 +104,38 @@ public class ChatService {
 	/** Streaming: returns token-by-token Flux for the /stream endpoint */
 	public StreamContext prepareStream(String query, UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
 		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
-		String searchQuery = condenseQuery(query, recentHistory);
+		QueryAnalysis analysis = analyzeIntentAndQuery(query, recentHistory);
 
 		saveMessage(notebookId, ChatMessage.Role.USER, query, null);
 
-		List<DocumentChunk> chunks = resolveChunks(notebookId, searchQuery, pinnedDocIds);
+		List<DocumentChunk> chunks = resolveChunks(notebookId, analysis, pinnedDocIds);
+		List<ChatMessage> recalledMessages = resolvePastMessages(notebookId, analysis, recentHistory);
 		List<String> excludedFileNames = resolveExcludedFileNames(notebookId, pinnedDocIds);
-		List<Message> springMessages = buildMessageHistory(notebookId, chunks, excludedFileNames);
+		List<Message> springMessages = buildMessageHistory(notebookId, chunks, recalledMessages, excludedFileNames, analysis);
+		List<Citation> citations = buildCitations(chunks);
+		String modelUsed = resolveModel(modelOverride);
+
+		ChatClient.ChatClientRequestSpec spec = buildSpec(springMessages, modelOverride);
+
+		StringBuilder fullResponse = new StringBuilder();
+		Flux<String> tokenStream = spec.stream().content()
+			.doOnNext(fullResponse::append)
+			.doOnComplete(() -> saveMessage(notebookId, ChatMessage.Role.ASSISTANT, fullResponse.toString(), modelUsed));
+
+		return new StreamContext(tokenStream, citations);
+	}
+
+	public StreamContext regenerate(String query, UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
+		List<ChatMessage> recentHistory = getRecentHistory(notebookId, CONDENSER_CONTEXT);
+		QueryAnalysis analysis = analyzeIntentAndQuery(query, recentHistory);
+
+		// DO NOT save the user query again, it already exists in the database.
+		// saveMessage(notebookId, ChatMessage.Role.USER, query, null);
+
+		List<DocumentChunk> chunks = resolveChunks(notebookId, analysis, pinnedDocIds);
+		List<ChatMessage> recalledMessages = resolvePastMessages(notebookId, analysis, recentHistory);
+		List<String> excludedFileNames = resolveExcludedFileNames(notebookId, pinnedDocIds);
+		List<Message> springMessages = buildMessageHistory(notebookId, chunks, recalledMessages, excludedFileNames, analysis);
 		List<Citation> citations = buildCitations(chunks);
 		String modelUsed = resolveModel(modelOverride);
 
@@ -118,12 +163,14 @@ public class ChatService {
 		return (modelOverride != null && !modelOverride.isBlank()) ? modelOverride : "default";
 	}
 
-	private List<Message> buildMessageHistory(UUID notebookId, List<DocumentChunk> currentChunks, List<String> excludedFileNames) {
+	private List<Message> buildMessageHistory(UUID notebookId, List<DocumentChunk> currentChunks, List<ChatMessage> recalledMessages, List<String> excludedFileNames, QueryAnalysis analysis) {
 		List<Message> messages = new ArrayList<>();
-		messages.add(new SystemMessage(buildSystemPrompt(currentChunks, excludedFileNames)));
+		messages.add(new SystemMessage(buildSystemPrompt(currentChunks, recalledMessages, excludedFileNames)));
 
-		// Sliding window — last WINDOW_MESSAGES rows, oldest-first
-		List<ChatMessage> history = getRecentHistory(notebookId, WINDOW_MESSAGES);
+		// Immediate conversational window is strictly locked to 4 messages (2 turns) 
+		// to drastically save tokens. All long-term memory is handled semantically.
+		List<ChatMessage> history = getRecentHistory(notebookId, 4);
+		
 		for (ChatMessage msg : history) {
 			if (msg.getRole() == ChatMessage.Role.USER) {
 				messages.add(new UserMessage(msg.getContent()));
@@ -150,15 +197,12 @@ public class ChatService {
 
 
 	/**
-	 * Rewrites a vague follow-up into a standalone search query using recent history.
-	 * Skipped entirely on the first message. Each message is capped at 200 chars
-	 * so the condenser prompt stays small regardless of conversation length.
-	 * Runs via CompletableFuture so it doesn't block the server thread.
+	 * Analyzes the user's intent and rewrites the follow-up into a standalone search query.
+	 * Returns a structured QueryAnalysis containing both the Intent and the optimized query.
 	 */
-	private String condenseQuery(String rawQuery, List<ChatMessage> recentHistory) {
-		if (recentHistory.isEmpty()) return rawQuery;
+	private QueryAnalysis analyzeIntentAndQuery(String rawQuery, List<ChatMessage> recentHistory) {
 		try {
-			String historyText = recentHistory.stream()
+			String historyText = recentHistory.isEmpty() ? "No history yet." : recentHistory.stream()
 					.map(m -> {
 						String c = m.getContent();
 						return m.getRole().name() + ": " + (c.length() > 200 ? c.substring(0, 200) : c);
@@ -166,50 +210,106 @@ public class ChatService {
 					.collect(Collectors.joining("\n"));
 
 			String prompt = """
-					Given the conversation history and a follow-up question, rewrite the \
-					follow-up into a single self-contained search query. \
-					Output ONLY the rewritten query, nothing else.
+					You are an intelligent query routing agent for an advanced RAG system.
+					Your task is to analyze the user's latest follow-up question and the recent conversation history to determine the optimal retrieval strategy.
+
+					Categories of Intent:
+					1. DOC_SEARCH: The user is asking a specific question that requires searching the uploaded knowledge base (documents/sources).
+					2. CHAT_HISTORY: The user is referencing a previous message, asking you to repeat something, or discussing the ongoing conversation itself without needing new document retrieval.
+					3. GENERAL: The user is engaging in casual chat (e.g., "hi", "thanks") or asking a general knowledge question (e.g., "write a python script") that does NOT require searching the uploaded documents.
+
+					Instructions:
+					1. Determine the intent.
+					2. If the intent is DOC_SEARCH, rewrite the follow-up question into a highly optimized, standalone search query that captures all necessary context from the history.
+					3. Output ONLY a valid JSON object with no markdown formatting.
+
+					Format:
+					{
+					  "intent": "DOC_SEARCH" | "CHAT_HISTORY" | "GENERAL",
+					  "standaloneQuery": "The optimized search query (or the original query if no rewrite needed)"
+					}
 
 					History:
 					%s
 
 					Follow-up: %s
-					Standalone query:""".formatted(historyText, rawQuery);
+					""".formatted(historyText, rawQuery);
 
-			String condensed = CompletableFuture.supplyAsync(() ->
+			String json = CompletableFuture.supplyAsync(() ->
 				chatClient.prompt()
 						.messages(List.of(new UserMessage(prompt)))
 						.call()
 						.content()
 			).get();
 
-			return (condensed != null && !condensed.isBlank()) ? condensed.strip() : rawQuery;
+			if (json != null && json.trim().startsWith("```json")) {
+				json = json.trim().substring(7);
+				if (json.endsWith("```")) {
+					json = json.substring(0, json.length() - 3);
+				}
+			}
+
+			ObjectMapper mapper = new ObjectMapper();
+			JsonNode node = mapper.readTree(json != null ? json.trim() : "{}");
+			
+			String intentStr = node.has("intent") ? node.get("intent").asText() : "DOC_SEARCH";
+			String standaloneQuery = node.has("standaloneQuery") ? node.get("standaloneQuery").asText() : rawQuery;
+			
+			Intent intent;
+			try {
+				intent = Intent.valueOf(intentStr);
+			} catch (Exception e) {
+				intent = Intent.DOC_SEARCH;
+			}
+			
+			log.info("Query routed: Intent={}, StandaloneQuery={}", intent, standaloneQuery);
+			return new QueryAnalysis(intent, standaloneQuery);
 		} catch (Exception e) {
-			log.warn("Query condensation failed, falling back to raw query: {}", e.getMessage());
-			return rawQuery;
+			log.warn("Query condensation failed, falling back to DOC_SEARCH: {}", e.getMessage());
+			return new QueryAnalysis(Intent.DOC_SEARCH, rawQuery);
 		}
 	}
 
-	private List<DocumentChunk> resolveChunks(UUID notebookId, String query, List<UUID> pinnedDocIds) {
+	private List<DocumentChunk> resolveChunks(UUID notebookId, QueryAnalysis analysis, List<UUID> pinnedDocIds) {
+		// Dynamic Routing: If intent is not DOC_SEARCH, bypass the database entirely
+		if (analysis.intent() == Intent.CHAT_HISTORY || analysis.intent() == Intent.GENERAL) {
+			return List.of();
+		}
+
 		boolean hasPinFilter = pinnedDocIds != null && !pinnedDocIds.isEmpty();
 
-		// Full-text search, then immediately filter to pinned docs only
-		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndQuery(notebookId, query)
+		// Full-text search, then filter to pinned docs
+		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndQuery(notebookId, analysis.standaloneQuery())
 				.stream()
 				.filter(c -> !hasPinFilter || pinnedDocIds.contains(c.getDocumentId()))
 				.toList();
 
-		// Fallback: fetch raw chunks restricted to pinned docs (or all if no filter)
-		if (chunks.isEmpty()) {
-			chunks = hasPinFilter
-					? chunkRepository.findByDocumentIdIn(pinnedDocIds)
-					: chunkRepository.findByNotebookId(notebookId);
-			if (chunks.size() > 15) chunks = chunks.subList(0, 15);
+		if (chunks.size() > 5) {
+			chunks = chunks.subList(0, 5);
 		}
 		return chunks;
 	}
 
-	private String buildSystemPrompt(List<DocumentChunk> chunks, List<String> excludedFileNames) {
+	private List<ChatMessage> resolvePastMessages(UUID notebookId, QueryAnalysis analysis, List<ChatMessage> recentHistory) {
+		if (analysis.intent() != Intent.CHAT_HISTORY) {
+			return List.of();
+		}
+
+		// Fetch semantic past messages
+		List<ChatMessage> semanticMessages = chatMessageRepository.searchByNotebookAndQuery(
+				notebookId, analysis.standaloneQuery(), 5);
+
+		// Extract IDs from recentHistory to avoid duplicate context
+		List<UUID> recentIds = recentHistory.stream()
+				.map(ChatMessage::getId)
+				.toList();
+
+		return semanticMessages.stream()
+				.filter(m -> !recentIds.contains(m.getId()))
+				.toList();
+	}
+
+	private String buildSystemPrompt(List<DocumentChunk> chunks, List<ChatMessage> recalledMessages, List<String> excludedFileNames) {
 		String exclusionBlock = "";
 		if (!excludedFileNames.isEmpty()) {
 			String fileList = excludedFileNames.stream()
@@ -228,6 +328,23 @@ public class ChatService {
 				""".formatted(fileList);
 		}
 
+		String recalledBlock = "";
+		if (!recalledMessages.isEmpty()) {
+			String mems = recalledMessages.stream()
+					.map(m -> m.getRole().name() + ": " + m.getContent())
+					.collect(Collectors.joining("\n\n"));
+			
+			recalledBlock = """
+				
+				===== RECALLED PAST CONVERSATIONS =====
+				The following are highly relevant snippets retrieved from past conversations with the user.
+				Use them to seamlessly answer questions about past discussions or recall previously stated facts.
+				
+				%s
+				===== END RECALLED CONVERSATIONS =====
+				""".formatted(mems);
+		}
+
 		if (chunks.isEmpty()) {
 			return """
 				You are a knowledgeable research assistant. No documents have been uploaded to this notebook yet.
@@ -238,7 +355,7 @@ public class ChatService {
 				- If the user asks you to reference uploaded documents, remind them to upload sources first
 				- Be concise but thorough
 				- Format your response using markdown where it improves readability (bold, lists, headers)
-				""" + exclusionBlock;
+				""" + exclusionBlock + recalledBlock;
 		}
 
 		String context = chunks.stream()

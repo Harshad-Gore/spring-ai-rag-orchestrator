@@ -19,4 +19,16 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
 			ORDER BY m.createdAt DESC
 			""")
 	List<ChatMessage> findRecentByNotebookId(@Param("notebookId") UUID notebookId, Pageable pageable);
+
+	@Query(value = """
+			SELECT * FROM chat_messages
+			WHERE notebook_id = :notebookId
+			AND to_tsvector('english', content) @@ plainto_tsquery('english', :query)
+			ORDER BY ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)) DESC
+			LIMIT :limit
+			""", nativeQuery = true)
+	List<ChatMessage> searchByNotebookAndQuery(
+			@Param("notebookId") UUID notebookId,
+			@Param("query") String query,
+			@Param("limit") int limit);
 }

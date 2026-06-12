@@ -109,6 +109,56 @@ public class ChatController {
 		}
 	}
 
+	@PostMapping(value = "/regenerate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	public Flux<ServerSentEvent<String>> regenerate(@RequestBody ChatRequest request) {
+		try {
+			List<UUID> pinned = parsePinned(request.pinnedDocIds());
+			StreamContext ctx = chatService.regenerate(
+				request.query(), UUID.fromString(request.notebookId()), request.model(), pinned);
+
+			Flux<ServerSentEvent<String>> tokenEvents = ctx.tokenStream()
+				.map(token -> {
+					try {
+						return ServerSentEvent.<String>builder()
+							.event("token")
+							.data(objectMapper.writeValueAsString(token))
+							.build();
+					} catch (Exception e) {
+						return ServerSentEvent.<String>builder().event("token").data("\"\"").build();
+					}
+				});
+
+			String citationsJson = serializeCitations(ctx.citations());
+
+			Flux<ServerSentEvent<String>> tail = Flux.just(
+				ServerSentEvent.<String>builder()
+					.event("citations")
+					.data(citationsJson)
+					.build(),
+				ServerSentEvent.<String>builder()
+					.event("done")
+					.data("")
+					.build()
+			);
+
+			return Flux.concat(tokenEvents, tail)
+				.onErrorResume(ex -> {
+					log.error("Stream error: {}", ex.getMessage(), ex);
+					return Flux.just(ServerSentEvent.<String>builder()
+						.event("error")
+						.data("Stream error: " + ex.getMessage())
+						.build());
+				});
+
+		} catch (Exception ex) {
+			log.error("Failed to start regenerate stream: {}", ex.getMessage(), ex);
+			return Flux.just(ServerSentEvent.<String>builder()
+				.event("error")
+				.data("Failed to start stream: " + ex.getMessage())
+				.build());
+		}
+	}
+
 	/** Fetch chat history for a notebook */
 	@GetMapping("/notebook/{notebookId}/history")
 	public ResponseEntity<List<ChatMessageDto>> getHistory(@PathVariable UUID notebookId) {
@@ -122,6 +172,12 @@ public class ChatController {
 				m.getCreatedAt().toString()))
 			.toList();
 		return ResponseEntity.ok(dtos);
+	}
+
+	@org.springframework.web.bind.annotation.DeleteMapping("/notebook/{notebookId}/last-interaction")
+	public ResponseEntity<Void> deleteLastInteraction(@PathVariable UUID notebookId) {
+		chatService.deleteLastInteraction(notebookId);
+		return ResponseEntity.ok().build();
 	}
 
 	private String serializeCitations(List<Citation> citations) {

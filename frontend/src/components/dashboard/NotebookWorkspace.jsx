@@ -14,7 +14,10 @@ function NotebookWorkspace({
   onOpenUpload,
   onRemoveDocument,
   onSendMessage,
+  onRegenerate,
   onRenameNotebook,
+  pinnedDocIds,
+  onTogglePin,
 }) {
   const [mobileTab, setMobileTab] = useState('chat')
 
@@ -62,6 +65,8 @@ function NotebookWorkspace({
             onOpenUpload={onOpenUpload}
             onRemoveDocument={onRemoveDocument}
             onRenameNotebook={onRenameNotebook}
+            pinnedDocIds={pinnedDocIds}
+            onTogglePin={onTogglePin}
           />
         </div>
 
@@ -75,6 +80,8 @@ function NotebookWorkspace({
           <ChatArena
             chatHistory={notebook?.chatHistory ?? []}
             onSendMessage={onSendMessage}
+            onRegenerate={(text, model) => onRegenerate(notebook.id, text, model)}
+            pinnedDocIds={pinnedDocIds}
           />
         </div>
       </div>

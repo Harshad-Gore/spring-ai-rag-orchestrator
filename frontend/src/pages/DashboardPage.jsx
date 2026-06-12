@@ -460,7 +460,85 @@ function DashboardPage() {
     [activeNotebookId, pinnedDocIds],
   )
 
-  // ------- Auth -------
+  const handleRegenerate = useCallback(async (notebookId, text, model) => {
+    if (!notebookId) return
+
+    const notebookIdAtSend = notebookId
+    const pinnedAtSend = [...pinnedDocIds]
+    const aiMsgId = `stream-${Date.now()}`
+    const aiMsg = { id: aiMsgId, role: 'assistant', content: '', citations: [], done: false }
+
+    setNotebooks((prev) =>
+      prev.map((nb) =>
+        nb.id === notebookIdAtSend
+          ? { ...nb, chatHistory: [...nb.chatHistory, aiMsg] }
+          : nb,
+      ),
+    )
+
+    const patchAi = (updater) =>
+      setNotebooks((prev) =>
+        prev.map((nb) =>
+          nb.id === notebookIdAtSend
+            ? { ...nb, chatHistory: nb.chatHistory.map((m) => m.id === aiMsgId ? { ...m, ...updater(m) } : m) }
+            : nb,
+        ),
+      )
+
+    try {
+      const token = getStoredAuthToken()
+      const res = await fetch(`${API_BASE_URL}/api/chat/regenerate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ query: text, notebookId: notebookIdAtSend, model, pinnedDocIds: pinnedAtSend }),
+      })
+
+      if (!res.ok) throw new Error(`Stream failed: ${res.status}`)
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let rawBuffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        rawBuffer += decoder.decode(value, { stream: true })
+
+        const blocks = rawBuffer.split('\n\n')
+        rawBuffer = blocks.pop() ?? ''
+
+        for (const block of blocks) {
+          if (!block.trim()) continue
+          const lines = block.split('\n')
+          const eventType = lines.find(l => l.startsWith('event:'))?.slice(6).trim()
+          const data = lines.find(l => l.startsWith('data:'))?.slice(5).trim() ?? ''
+
+          if (eventType === 'token') {
+            try {
+              const textChunk = JSON.parse(data)
+              patchAi((m) => ({ content: m.content + textChunk }))
+            } catch { /* ignore */ }
+          } else if (eventType === 'citations') {
+            try { patchAi(() => ({ citations: JSON.parse(data) })) } catch { /* ignore */ }
+          } else if (eventType === 'done') {
+            patchAi(() => ({ done: true }))
+          } else if (eventType === 'error') {
+            patchAi(() => ({ content: data || 'An error occurred.', done: true }))
+          }
+        }
+      }
+      patchAi((m) => ({ done: m.done || true }))
+    } catch (e) {
+      console.error('Failed to regenerate stream', e)
+      patchAi(() => ({ content: `Error: ${e.message}`, done: true }))
+    }
+  }, [pinnedDocIds])
+
+  // ------- Render Helpers -------
 
   async function handleLogout() {
     await logout()
@@ -497,6 +575,8 @@ function DashboardPage() {
               onBack={handleGoHome}
               onOpenUpload={() => setShowUploadModal(true)}
               onRemoveDocument={handleRemoveDocument}
+              onSendMessage={handleSendMessage}
+              onRegenerate={handleRegenerate}
               onRenameNotebook={handleRenameNotebook}
               pinnedDocIds={pinnedDocIds}
               onTogglePin={handleTogglePin}
@@ -512,6 +592,7 @@ function DashboardPage() {
             <ChatArena
               chatHistory={activeNotebook.chatHistory || []}
               onSendMessage={handleSendMessage}
+              onRegenerate={(text, model) => handleRegenerate(activeNotebook.id, text, model)}
               pinnedDocIds={pinnedDocIds}
               onRenameNotebook={handleRenameNotebook}
               isLoading={isLoadingNotebook}

@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, useLayoutEffect, useCallback, memo } from 'react'
-import { Bot, ChevronDown, Loader2, Send, Sparkles, User } from 'lucide-react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, memo, useMemo } from 'react'
+import { Bot, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Sparkles, User, Copy, RefreshCcw, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Button } from '../ui/button.jsx'
 import CitationPill from './CitationPill.jsx'
+import { useToast } from '../ui/toast.jsx'
 
 // ---------------------------------------------------------------------------
 // Elapsed timer shown while streaming
@@ -22,6 +25,51 @@ function ElapsedTimer({ isActive }) {
   return <span className="text-[10px] tabular-nums text-[#657069]">{elapsed}s</span>
 }
 
+function CodeBlock({ inline, className, children, ...props }) {
+  const match = /language-(\w+)/.exec(className || '')
+  const language = match ? match[1] : ''
+  const codeText = String(children).replace(/\n$/, '')
+  
+  const { toast } = useToast()
+  const [isCopied, setIsCopied] = useState(false)
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(codeText)
+    setIsCopied(true)
+    toast({ message: 'Code copied to clipboard!' })
+    setTimeout(() => setIsCopied(false), 2000)
+  }
+
+  return inline ? (
+    <code className="rounded-md bg-[#1a2a1f] px-1.5 py-0.5 font-mono text-[13px] text-[#7ef2b0]" {...props}>{children}</code>
+  ) : (
+    <div className="mb-4 overflow-hidden rounded-lg border border-[#242424] bg-[#0d0d0d]">
+      <div className="flex items-center justify-between bg-[#141414] px-4 py-2 border-b border-[#242424]">
+        <span className="text-xs font-medium text-[#657069]">{language || 'text'}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[#657069] transition-colors hover:bg-white/5 hover:text-[#f0fdf4] cursor-pointer"
+        >
+          {isCopied ? <Check className="size-3.5 text-[#58d68d]" /> : <Copy className="size-3.5" />}
+          {isCopied ? 'Copied' : 'Copy code'}
+        </button>
+      </div>
+      <div className="text-[13px] leading-6 max-h-[500px] overflow-auto">
+        <SyntaxHighlighter
+          style={vscDarkPlus}
+          language={language}
+          PreTag="div"
+          customStyle={{ margin: 0, padding: '1rem', background: 'transparent' }}
+          {...props}
+        >
+          {codeText}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  )
+}
+
 // Defined outside component — never recreated on re-render
 const MD_COMPONENTS = {
   h1: ({node, ...props}) => <h3 className="mt-4 mb-2 text-lg font-semibold text-white" {...props} />,
@@ -33,19 +81,7 @@ const MD_COMPONENTS = {
   li: ({node, ...props}) => <li {...props} />,
   strong: ({node, ...props}) => <strong className="font-semibold text-white" {...props} />,
   em: ({node, ...props}) => <em className="italic text-[#d8f3e8]" {...props} />,
-  code: ({node, inline, className, children, ...props}) => {
-    const match = /language-(\w+)/.exec(className || '')
-    return inline ? (
-      <code className="rounded-md bg-[#1a2a1f] px-1.5 py-0.5 font-mono text-[13px] text-[#7ef2b0]" {...props}>{children}</code>
-    ) : (
-      <div className="mb-4 overflow-hidden rounded-lg border border-[#242424] bg-[#0d0d0d]">
-        {match && <div className="bg-[#141414] px-4 py-1.5 text-xs font-medium text-[#657069] border-b border-[#242424]">{match[1]}</div>}
-        <pre className="overflow-x-auto p-4 text-[13px] leading-6 text-[#e8f5ed] m-0 bg-transparent">
-          <code className="font-mono bg-transparent p-0" {...props}>{children}</code>
-        </pre>
-      </div>
-    )
-  },
+  code: CodeBlock,
   table: ({node, ...props}) => <div className="mb-4 overflow-x-auto"><table className="min-w-full text-sm border-collapse" {...props} /></div>,
   th: ({node, ...props}) => <th className="border-b border-[#242424] p-3 text-left font-medium text-[#dffdee]/80" {...props} />,
   td: ({node, ...props}) => <td className="border-b border-[#242424]/50 p-3" {...props} />,
@@ -55,8 +91,21 @@ const MD_COMPONENTS = {
 // ---------------------------------------------------------------------------
 // Single message bubble
 // ---------------------------------------------------------------------------
-const MessageBubble = memo(function MessageBubble({ msg, isStreaming, fadeIn = false, fadeDelay = 0 }) {
+const MessageBubble = memo(function MessageBubble({ variants, isStreaming, fadeIn = false, fadeDelay = 0, isLatestAssistant, onRegenerate }) {
+  const [variantIndex, setVariantIndex] = useState(variants ? variants.length - 1 : 0)
+  
+  useEffect(() => {
+    if (variants) {
+      setVariantIndex(variants.length - 1)
+    }
+  }, [variants?.length])
+
+  const msg = variants ? variants[variantIndex] : null
+  if (!msg) return null
+
   const isUser = msg.role === 'user'
+  const hasMultipleVariants = variants.length > 1
+
   return (
     <div
       className={['flex gap-3 group', isUser ? 'justify-end' : 'justify-start', fadeIn ? 'animate-fade-in' : ''].join(' ')}
@@ -70,7 +119,7 @@ const MessageBubble = memo(function MessageBubble({ msg, isStreaming, fadeIn = f
       )}
 
       <div className={[
-        'relative max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-7',
+        'relative max-w-[82%] min-h-[44px] rounded-2xl px-4 py-3 text-sm leading-7',
         isUser
           ? 'rounded-tr-sm bg-gradient-to-br from-[#1a3023] to-[#142519] border border-[#2a4a34] text-[#e8f5ed] shadow-[0_2px_12px_rgba(0,0,0,0.3)]'
           : 'rounded-tl-sm bg-[#0f1710]/80 border border-[#1e2b20] text-[#c8cdc9] shadow-[0_2px_12px_rgba(0,0,0,0.3)] backdrop-blur-sm',
@@ -92,6 +141,61 @@ const MessageBubble = memo(function MessageBubble({ msg, isStreaming, fadeIn = f
             {msg.citations.map((cite, i) => (
               <CitationPill key={i} index={i + 1} source={cite.source} excerpt={cite.excerpt} />
             ))}
+          </div>
+        )}
+
+        {/* Footer actions for assistant */}
+        {!isUser && !isStreaming && (
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(msg.content)
+                  const toastEl = document.createElement('div')
+                  toastEl.className = 'fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-[#1e3a2a]/60 bg-[#0e1f16]/95 px-4 py-3 text-[#dffdee] shadow-[0_8px_30px_rgb(0,0,0,0.5)] animate-fade-in'
+                  toastEl.innerHTML = `<svg class="size-5 text-[#58d68d]" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg><p class="text-sm font-medium">Text copied to clipboard!</p>`
+                  document.body.appendChild(toastEl)
+                  setTimeout(() => {
+                    toastEl.style.opacity = '0'
+                    toastEl.style.transition = 'opacity 0.3s'
+                    setTimeout(() => toastEl.remove(), 300)
+                  }, 2000)
+                }}
+                className="p-1.5 text-[#657069] hover:text-[#c8cdc9] hover:bg-white/5 rounded-md transition-colors cursor-pointer"
+                title="Copy message text"
+              >
+                <Copy className="size-3.5" />
+              </button>
+              {isLatestAssistant && onRegenerate && (
+                <button
+                  onClick={onRegenerate}
+                  className="p-1.5 text-[#657069] hover:text-[#58d68d] hover:bg-[#58d68d]/10 rounded-md transition-colors cursor-pointer"
+                  title="Regenerate response"
+                >
+                  <RefreshCcw className="size-3.5" />
+                </button>
+              )}
+            </div>
+            
+            {hasMultipleVariants && (
+              <div className="flex items-center gap-1.5 text-xs font-medium text-[#657069]">
+                <button 
+                  onClick={() => setVariantIndex(Math.max(0, variantIndex - 1))}
+                  disabled={variantIndex === 0}
+                  className="p-1 hover:text-[#dffdee] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  <ChevronLeft className="size-3.5" />
+                </button>
+                <span>{variantIndex + 1} <span className="opacity-50">/</span> {variants.length}</span>
+                <button 
+                  onClick={() => setVariantIndex(Math.min(variants.length - 1, variantIndex + 1))}
+                  disabled={variantIndex === variants.length - 1}
+                  className="p-1 hover:text-[#dffdee] disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer transition-colors"
+                >
+                  <ChevronRight className="size-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -147,7 +251,7 @@ const GROQ_MODELS = [
   { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', tag: 'Efficient', tagColor: '#eb984e' },
 ]
 
-function ChatArena({ chatHistory, onSendMessage, pinnedDocIds, isLoading = false }) {
+function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isLoading = false }) {
   const [inputValue, setInputValue] = useState('')
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem('selected_model') || GROQ_MODELS[0].id
@@ -189,6 +293,25 @@ function ChatArena({ chatHistory, onSendMessage, pinnedDocIds, isLoading = false
   const [historyReady, setHistoryReady] = useState(false)
   const [scrollReady, setScrollReady] = useState(false)
   const scrollRef = useRef(null)
+
+  const groupedHistory = useMemo(() => {
+    if (!chatHistory) return []
+    const groups = []
+    for (let i = 0; i < chatHistory.length; i++) {
+      const msg = chatHistory[i]
+      if (msg.role === 'user') {
+        groups.push({ id: msg.id, role: 'user', variants: [msg] })
+      } else {
+        const lastGroup = groups[groups.length - 1]
+        if (lastGroup && lastGroup.role === 'assistant') {
+          lastGroup.variants.push(msg)
+        } else {
+          groups.push({ id: msg.id, role: 'assistant', variants: [msg] })
+        }
+      }
+    }
+    return groups
+  }, [chatHistory])
 
   // Reset when a new notebook is opened (isLoading flips true)
   useEffect(() => {
@@ -311,16 +434,24 @@ function ChatArena({ chatHistory, onSendMessage, pinnedDocIds, isLoading = false
           </div>
         ) : (
           <div className="mx-auto max-w-4xl space-y-6">
-            {historyReady && chatHistory.map((msg, i) => {
-              if (isThinking && msg.id === streamingMsgId && !msg.content) return null
-              const isLast = i === initialHistoryLength.current - 1
+            {historyReady && groupedHistory.map((group, i) => {
+              const hasStreamingVariant = group.variants.some(v => v.id === streamingMsgId)
+              if (isThinking && hasStreamingVariant && !group.variants.find(v => v.id === streamingMsgId)?.content) return null
+              const isLast = i === groupedHistory.length - 1
               return (
                 <MessageBubble
-                  key={msg.id}
-                  msg={msg}
-                  isStreaming={isStreaming && msg.id === streamingMsgId}
+                  key={group.id}
+                  variants={group.variants}
+                  isStreaming={isStreaming && hasStreamingVariant}
                   fadeIn={isLast && initialHistoryLength.current > 0}
                   fadeDelay={0}
+                  isLatestAssistant={isLast && group.role === 'assistant'}
+                  onRegenerate={() => {
+                    const lastUserGroup = groupedHistory[i - 1]
+                    if (onRegenerate && lastUserGroup?.role === 'user') {
+                      onRegenerate(lastUserGroup.variants[0].content, selectedModel)
+                    }
+                  }}
                 />
               )
             })}
