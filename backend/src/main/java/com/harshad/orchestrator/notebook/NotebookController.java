@@ -16,22 +16,25 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.harshad.orchestrator.auth.AuthenticatedUser;
+import com.harshad.orchestrator.document.DocumentRepository;
 
 @RestController
 @RequestMapping("/api/notebooks")
 public class NotebookController {
 
 	private final NotebookService notebookService;
+	private final DocumentRepository documentRepository;
 
-	public NotebookController(NotebookService notebookService) {
+	public NotebookController(NotebookService notebookService, DocumentRepository documentRepository) {
 		this.notebookService = notebookService;
+		this.documentRepository = documentRepository;
 	}
 
 	@GetMapping
 	public List<NotebookResponse> list(Authentication auth) {
 		UUID userId = extractUserId(auth);
 		return notebookService.listByUser(userId).stream()
-			.map(NotebookResponse::from)
+			.map(nb -> NotebookResponse.from(nb, documentRepository.countByNotebookId(nb.getId())))
 			.toList();
 	}
 
@@ -41,7 +44,7 @@ public class NotebookController {
 			@RequestBody CreateRequest request) {
 		UUID userId = extractUserId(auth);
 		Notebook notebook = notebookService.create(userId, request.title());
-		return ResponseEntity.status(HttpStatus.CREATED).body(NotebookResponse.from(notebook));
+		return ResponseEntity.status(HttpStatus.CREATED).body(NotebookResponse.from(notebook, 0));
 	}
 
 	@PutMapping("/{id}")
@@ -50,7 +53,8 @@ public class NotebookController {
 			@PathVariable UUID id,
 			@RequestBody RenameRequest request) {
 		UUID userId = extractUserId(auth);
-		return NotebookResponse.from(notebookService.rename(id, userId, request.title()));
+		Notebook nb = notebookService.rename(id, userId, request.title());
+		return NotebookResponse.from(nb, documentRepository.countByNotebookId(nb.getId()));
 	}
 
 	@DeleteMapping("/{id}")
@@ -66,7 +70,8 @@ public class NotebookController {
 			@PathVariable UUID id,
 			@RequestBody MoveToFolderRequest request) {
 		UUID userId = extractUserId(auth);
-		return NotebookResponse.from(notebookService.moveNotebookToFolder(id, userId, request.folderId()));
+		Notebook nb = notebookService.moveNotebookToFolder(id, userId, request.folderId());
+		return NotebookResponse.from(nb, documentRepository.countByNotebookId(nb.getId()));
 	}
 
 	@PutMapping("/{id}/tags")
@@ -75,7 +80,8 @@ public class NotebookController {
 			@PathVariable UUID id,
 			@RequestBody UpdateTagsRequest request) {
 		UUID userId = extractUserId(auth);
-		return NotebookResponse.from(notebookService.updateTags(id, userId, request.tagIds()));
+		Notebook nb = notebookService.updateTags(id, userId, request.tagIds());
+		return NotebookResponse.from(nb, documentRepository.countByNotebookId(nb.getId()));
 	}
 
 	@PostMapping("/{id}/share")
@@ -105,8 +111,8 @@ public class NotebookController {
 	public record UpdateTagsRequest(List<UUID> tagIds) {}
 	public record ShareRequest(String shareType, String sharedResources) {}
 	public record ShareResponse(String shareToken) {}
-	public record NotebookResponse(String id, String title, String createdAt, String shareToken, String shareType, String sharedResources, String clonedFromEmail, String folderId, List<String> tagIds) {
-		static NotebookResponse from(Notebook nb) {
+	public record NotebookResponse(String id, String title, String createdAt, String shareToken, String shareType, String sharedResources, String clonedFromEmail, String folderId, List<String> tagIds, int documentCount) {
+		static NotebookResponse from(Notebook nb, int documentCount) {
 			return new NotebookResponse(
 				nb.getId().toString(),
 				nb.getTitle(),
@@ -116,7 +122,8 @@ public class NotebookController {
 				nb.getSharedResources(),
 				nb.getClonedFromEmail(),
 				nb.getFolderId() != null ? nb.getFolderId().toString() : null,
-				nb.getTagIds().stream().map(UUID::toString).toList()
+				nb.getTagIds().stream().map(UUID::toString).toList(),
+				documentCount
 			);
 		}
 	}

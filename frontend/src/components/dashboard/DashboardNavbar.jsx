@@ -128,44 +128,7 @@ function DashboardNavbar({
 
         {/* Right: create + profile */}
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
-          {!isSettingsPage && !isSharedView && (
-            <>
-              {/* Create Notebook — desktop */}
-              <Button
-                type="button"
-                variant="default"
-                size="sm"
-                onClick={onCreateNotebook}
-                disabled={isCreatingNotebook}
-                className="hidden md:inline-flex"
-              >
-                {isCreatingNotebook ? (
-                  <><Loader2 aria-hidden="true" className="size-3.5 animate-spin" /> Creating...</>
-                ) : (
-                  <><Plus aria-hidden="true" className="size-3.5" /> New Notebook</>
-                )}
-              </Button>
 
-              {/* Create Notebook — mobile icon */}
-              <Button
-                type="button"
-                variant="default"
-                size="icon"
-                onClick={onCreateNotebook}
-                disabled={isCreatingNotebook}
-                aria-label="Create new notebook"
-                className="md:hidden size-8"
-              >
-                {isCreatingNotebook ? (
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                ) : (
-                  <Plus aria-hidden="true" className="size-4" />
-                )}
-              </Button>
-            </>
-          )}
-
-          {/* Profile dropdown */}
           <div ref={profileRef} className="relative">
             <button
               type="button"

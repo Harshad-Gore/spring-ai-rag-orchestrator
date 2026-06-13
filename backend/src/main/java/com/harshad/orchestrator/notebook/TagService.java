@@ -10,9 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class TagService {
 
 	private final TagRepository tagRepository;
+	private final NotebookRepository notebookRepository;
 
-	public TagService(TagRepository tagRepository) {
+	public TagService(TagRepository tagRepository, NotebookRepository notebookRepository) {
 		this.tagRepository = tagRepository;
+		this.notebookRepository = notebookRepository;
 	}
 
 	public List<Tag> listByUser(UUID userId) {
@@ -29,6 +31,15 @@ public class TagService {
 		Tag tag = tagRepository.findById(id)
 				.filter(t -> t.getUserId().equals(userId))
 				.orElseThrow(() -> new IllegalArgumentException("Tag not found"));
+
+		List<Notebook> notebooks = notebookRepository.findByUserIdOrderByCreatedAtDesc(userId);
+		for (Notebook nb : notebooks) {
+			if (nb.getTagIds().contains(id)) {
+				nb.getTagIds().remove(id);
+				notebookRepository.save(nb);
+			}
+		}
+
 		tagRepository.delete(tag);
 	}
 }

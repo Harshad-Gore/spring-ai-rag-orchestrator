@@ -1,13 +1,19 @@
-import { Folder, MoreVertical, Edit2, Trash2, Pencil } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
+import { Folder } from 'lucide-react'
 
-export default function FolderCard({ folder, onClick, onRename, onDelete, onDropNotebook }) {
-  const [menuOpen, setMenuOpen] = useState(false)
+export default function FolderCard({ folder, onOpen, onRename, onDelete, onDropItem, onContextMenu, viewMode = 'grid', forceEdit, onRenameStart, isSelected, onSelect }) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [renameValue, setRenameValue] = useState(folder.name)
-  const menuRef = useRef(null)
   const renameInputRef = useRef(null)
+
+  useEffect(() => {
+    if (forceEdit) {
+      setRenaming(true)
+      setRenameValue(folder.name)
+      if (onRenameStart) onRenameStart()
+    }
+  }, [forceEdit, folder.name, onRenameStart])
 
   useEffect(() => {
     if (renaming && renameInputRef.current) {
@@ -19,28 +25,67 @@ export default function FolderCard({ folder, onClick, onRename, onDelete, onDrop
   function handleRenameSubmit() {
     const trimmed = renameValue.trim()
     if (trimmed && trimmed !== folder.name) {
-      onRename(folder, trimmed)
+      onRename(folder.id, trimmed)
     } else {
       setRenameValue(folder.name)
     }
     setRenaming(false)
   }
 
-  useEffect(() => {
-    if (!menuOpen) return
-    function handleClick(e) {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setMenuOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [menuOpen])
+  const isList = viewMode.startsWith('list')
+  const isLarge = viewMode === 'grid-large'
+  const isMedium = viewMode === 'grid'
+  const isSmall = viewMode === 'grid-compact'
+
+  let iconSizeClass = 'size-6'
+  let iconChildSizeClass = 'size-4'
+  let layoutClass = 'flex-row items-center gap-3 py-1 px-2'
+  let textAlignment = 'text-left'
+  let containerWidth = 'w-full'
+
+  if (isLarge) {
+    iconSizeClass = 'size-24'
+    iconChildSizeClass = 'size-12'
+    layoutClass = 'flex-col items-center gap-2 p-3'
+    textAlignment = 'text-center'
+    containerWidth = 'w-[140px]'
+  } else if (isMedium) {
+    iconSizeClass = 'size-16'
+    iconChildSizeClass = 'size-8'
+    layoutClass = 'flex-col items-center gap-1.5 p-2'
+    textAlignment = 'text-center'
+    containerWidth = 'w-[100px]'
+  } else if (isSmall) {
+    iconSizeClass = 'size-12'
+    iconChildSizeClass = 'size-6'
+    layoutClass = 'flex-col items-center gap-1 p-2'
+    textAlignment = 'text-center'
+    containerWidth = 'w-[80px]'
+  } else if (isList) {
+    layoutClass = viewMode === 'list-compact' ? 'flex-row items-center gap-2 py-0.5 px-2' : 'flex-row items-center gap-3 py-1.5 px-2'
+    containerWidth = 'w-[250px]'
+  }
 
   return (
     <div
       onClick={(e) => {
-        if (!renaming) onClick(e)
+        if (!renaming && onSelect) onSelect(e, folder)
+      }}
+      onContextMenu={(e) => onContextMenu && onContextMenu(e, folder)}
+      onDoubleClick={(e) => {
+        e.stopPropagation()
+        if (!renaming && onOpen) onOpen(folder.id)
+      }}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !renaming && onOpen) onOpen(folder.id)
+        if (e.key === 'F2' && !renaming) {
+          e.stopPropagation()
+          setRenaming(true)
+          setRenameValue(folder.name)
+          if (onRenameStart) onRenameStart()
+        }
       }}
       onDragOver={(e) => {
         e.preventDefault()
@@ -50,60 +95,35 @@ export default function FolderCard({ folder, onClick, onRename, onDelete, onDrop
       onDrop={(e) => {
         e.preventDefault()
         setIsDragOver(false)
-        const notebookId = e.dataTransfer.getData('notebookId')
-        if (notebookId) {
-          onDropNotebook(notebookId, folder.id)
+        try {
+          const data = JSON.parse(e.dataTransfer.getData('application/json'))
+          if (data && data.id && data.id !== folder.id) {
+            onDropItem(data.id, data.type)
+          }
+        } catch (err) {
+          // fallback
+          const notebookId = e.dataTransfer.getData('notebookId')
+          if (notebookId) onDropItem(notebookId, 'notebook')
         }
       }}
-      className={`group relative flex cursor-pointer flex-col overflow-hidden rounded-xl border transition-all ${
+      draggable
+      onDragStart={(e) => {
+        e.stopPropagation()
+        e.dataTransfer.setData('application/json', JSON.stringify({ id: folder.id, type: 'folder' }))
+      }}
+      className={`group relative flex cursor-pointer rounded border transition-colors ${layoutClass} ${containerWidth} ${
         isDragOver 
-          ? 'border-[#58d68d] bg-[#1a2f22]' 
-          : 'border-[#242424] bg-[#0d0d0d] hover:border-[#333] hover:bg-[#121212]'
+          ? 'border-[#58d68d] bg-[#ffffff15]' 
+          : isSelected 
+            ? 'bg-[#eccb45]/20 border-[#eccb45]/50'
+            : 'border-transparent hover:bg-white/10 hover:border-white/5'
       }`}
     >
-      <div className="flex flex-col p-5">
-        <div className="flex items-start justify-between">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-[#1a1a1a] text-[#58d68d]">
-            <Folder className="size-5" />
-          </div>
-          <div className="relative" ref={menuRef} onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="flex size-8 items-center justify-center rounded-md text-[#657069] opacity-0 transition-opacity hover:bg-[#1a1a1a] hover:text-[#c8cdc9] group-hover:opacity-100"
-            >
-              <MoreVertical className="size-4" />
-            </button>
-            {menuOpen && (
-              <div className="absolute right-0 top-full z-30 mt-1 w-40 overflow-hidden rounded-lg border border-[#242424] bg-[#111] shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setMenuOpen(false)
-                    setRenaming(true)
-                    setRenameValue(folder.name)
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[#c8cdc9] transition hover:bg-white/[0.06] hover:text-white"
-                >
-                  <Pencil aria-hidden="true" className="size-3.5" />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setMenuOpen(false)
-                    onDelete(folder.id)
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
-                >
-                  <Trash2 aria-hidden="true" className="size-3.5" />
-                  Delete
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className={`flex ${iconSizeClass} shrink-0 items-center justify-center rounded-lg text-[#eccb45]`}>
+        <Folder fill="currentColor" fillOpacity={0.2} aria-hidden="true" className={iconChildSizeClass} />
+      </div>
+
+      <div className={`flex flex-col min-w-0 flex-1 ${textAlignment}`}>
         {renaming ? (
           <input
             ref={renameInputRef}
@@ -119,16 +139,17 @@ export default function FolderCard({ folder, onClick, onRename, onDelete, onDrop
               }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="mt-4 w-full rounded-md border border-[#dffdee]/30 bg-[#111] px-2 py-1 text-sm font-semibold text-white outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
+            className="w-full min-w-[60px] rounded border border-[#58d68d] bg-black px-1 text-sm text-white outline-none"
           />
         ) : (
-          <h3 className="mt-4 truncate text-base font-semibold text-[#dffdee]">
+          <span className={`truncate text-sm text-white drop-shadow-md ${isList ? '' : 'line-clamp-2 whitespace-normal leading-tight'}`} title={folder.name}>
             {folder.name}
-          </h3>
+          </span>
         )}
-        <div className="mt-1 flex items-center gap-2">
-          <p className="text-xs text-[#657069]">Folder</p>
-        </div>
+        
+        {isList && (
+          <span className="text-[11px] text-[#a2a8a5] truncate">File folder</span>
+        )}
       </div>
     </div>
   )

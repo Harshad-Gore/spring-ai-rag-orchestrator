@@ -60,12 +60,22 @@ public class NotebookFolderController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@PutMapping("/{id}/move")
+	public FolderResponse move(
+			Authentication auth,
+			@PathVariable UUID id,
+			@RequestBody MoveFolderRequest request) {
+		UUID userId = extractUserId(auth);
+		return FolderResponse.from(folderService.move(id, userId, request.parentId()));
+	}
+
 	private UUID extractUserId(Authentication auth) {
 		return ((AuthenticatedUser) auth.getPrincipal()).id();
 	}
 
 	public record CreateFolderRequest(String name, UUID parentId) {}
 	public record RenameFolderRequest(String name) {}
+	public record MoveFolderRequest(UUID parentId) {}
 	public record FolderResponse(String id, String parentId, String name, String createdAt) {
 		static FolderResponse from(NotebookFolder folder) {
 			return new FolderResponse(

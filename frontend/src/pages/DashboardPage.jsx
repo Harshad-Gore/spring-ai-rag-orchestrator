@@ -3,7 +3,8 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { getStoredAuthToken } from '../services/authApi.js'
 import DashboardNavbar from '../components/dashboard/DashboardNavbar.jsx'
-import NotebookLibrary from '../components/dashboard/NotebookLibrary.jsx'
+import ExplorerView from '../components/dashboard/ExplorerView.jsx'
+import FolderTreeSidebar from '../components/dashboard/FolderTreeSidebar.jsx'
 import DocumentSidebar from '../components/dashboard/DocumentSidebar.jsx'
 import ChatArena from '../components/dashboard/ChatArena.jsx'
 import UploadModal from '../components/dashboard/UploadModal.jsx'
@@ -64,6 +65,8 @@ function DashboardPage() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebar_width')) || 320)
   const [isDragging, setIsDragging] = useState(false)
+  const [folderSidebarWidth, setFolderSidebarWidth] = useState(() => Number(localStorage.getItem('folder_sidebar_width')) || 256)
+  const [isFolderDragging, setIsFolderDragging] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(true)
@@ -89,6 +92,10 @@ function DashboardPage() {
   }, [sidebarWidth])
 
   useEffect(() => {
+    localStorage.setItem('folder_sidebar_width', folderSidebarWidth)
+  }, [folderSidebarWidth])
+
+  useEffect(() => {
     if (!isDragging) return
     const handleMouseMove = (e) => {
       let newWidth = e.clientX
@@ -104,6 +111,23 @@ function DashboardPage() {
       document.removeEventListener('mouseup', handleMouseUp)
     }
   }, [isDragging])
+
+  useEffect(() => {
+    if (!isFolderDragging) return
+    const handleMouseMove = (e) => {
+      let newWidth = e.clientX
+      if (newWidth < 180) newWidth = 180
+      if (newWidth > 500) newWidth = 500
+      setFolderSidebarWidth(newWidth)
+    }
+    const handleMouseUp = () => setIsFolderDragging(false)
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isFolderDragging])
 
 
 
@@ -140,6 +164,7 @@ function DashboardPage() {
 
       setNotebooks((prev) => [newNb, ...prev])
       toast({ type: 'success', message: 'Notebook created' })
+      return newNb
     } catch (err) {
       console.error('Failed to create notebook:', err)
       toast({ type: 'error', message: err.message })
@@ -154,43 +179,44 @@ function DashboardPage() {
   }, [navigate, activeFolderId])
 
   // Fetch notebooks, folders, and tags from database on mount
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const [nbRes, fRes, tRes] = await Promise.all([
-          apiFetch('/api/notebooks'),
-          apiFetch('/api/folders'),
-          apiFetch('/api/tags')
-        ])
-        if (nbRes.ok) {
-          const data = await nbRes.json()
-          setNotebooks((prev) => 
-            data.map((newNb) => {
-              const existing = prev.find(p => p.id === newNb.id)
-              return {
-                ...newNb,
-                documents: existing?.documents || [],
-                chatHistory: existing?.chatHistory || [],
-              }
-            })
-          )
-        }
-        if (fRes.ok) {
-          const data = await fRes.json()
-          setFolders(data)
-        }
-        if (tRes.ok) {
-          const data = await tRes.json()
-          setTags(data)
-        }
-      } catch (err) {
-        console.error('Failed to fetch data:', err)
-      } finally {
-        setIsLoadingNotebooks(false)
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const [nbRes, fRes, tRes] = await Promise.all([
+        apiFetch('/api/notebooks'),
+        apiFetch('/api/folders'),
+        apiFetch('/api/tags')
+      ])
+      if (nbRes.ok) {
+        const data = await nbRes.json()
+        setNotebooks((prev) => 
+          data.map((newNb) => {
+            const existing = prev.find(p => p.id === newNb.id)
+            return {
+              ...newNb,
+              documents: existing?.documents,
+              chatHistory: existing?.chatHistory || [],
+            }
+          })
+        )
       }
+      if (fRes.ok) {
+        const data = await fRes.json()
+        setFolders(data)
+      }
+      if (tRes.ok) {
+        const data = await tRes.json()
+        setTags(data)
+      }
+    } catch (err) {
+      console.error('Failed to fetch data:', err)
+    } finally {
+      setIsLoadingNotebooks(false)
     }
-    fetchData()
   }, [])
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [fetchDashboardData])
 
   const loadedNotebookIdRef = useRef(null)
 
@@ -224,6 +250,7 @@ function DashboardPage() {
             ? {
                 ...nb,
                 documents: docs.map((d) => ({ id: d.id, title: d.fileName, contentType: d.contentType })),
+                documentCount: docs.length,
                 chatHistory: history,
               }
             : nb,
@@ -274,13 +301,92 @@ function DashboardPage() {
             navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard')
           }
           toast({ type: 'success', message: 'Notebook deleted' })
+          closeConfirm()
         } catch (err) {
           console.error('Failed to delete notebook:', err)
           toast({ type: 'error', message: err.message })
+          closeConfirm()
         }
       },
     })
-  }, [activeNotebookId, navigate, toast])
+  }, [activeNotebookId, navigate, toast, activeFolderId, activeNotebook?.folderId])
+
+  const handleBulkDelete = useCallback((selectedIds) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Delete Multiple Items',
+      description: `Are you sure you want to delete ${selectedIds.size} items? This action cannot be undone.`,
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          const promises = []
+          for (const id of selectedIds) {
+            const isFolder = folders.some(f => f.id === id)
+            if (isFolder) {
+              promises.push(apiFetch(`/api/folders/${encodeURIComponent(id)}`, { method: 'DELETE' }))
+            } else {
+              promises.push(apiFetch(`/api/notebooks/${encodeURIComponent(id)}`, { method: 'DELETE' }))
+            }
+          }
+          await Promise.all(promises)
+          
+          setFolders(prev => prev.filter(f => !selectedIds.has(f.id)))
+          setNotebooks(prev => prev.filter(nb => !selectedIds.has(nb.id)))
+          
+          if (activeNotebookId && selectedIds.has(activeNotebookId)) {
+            const targetFolderId = activeFolderId || activeNotebook?.folderId
+            navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard')
+          } else if (activeFolderId && selectedIds.has(activeFolderId)) {
+            navigate('/dashboard')
+          }
+          
+          toast({ type: 'success', message: `${selectedIds.size} items deleted` })
+          closeConfirm()
+        } catch (err) {
+          console.error('Failed to bulk delete:', err)
+          toast({ type: 'error', message: 'Some items failed to delete' })
+          closeConfirm()
+        }
+      }
+    })
+  }, [folders, activeNotebookId, activeFolderId, activeNotebook, navigate, toast])
+
+  const handleBulkRename = useCallback(async (selectedIds, baseName) => {
+    let count = 1
+    try {
+      for (const id of selectedIds) {
+        const isFolder = folders.some(f => f.id === id)
+        const newName = count === 1 ? baseName : `${baseName} (${count})`
+        
+        if (isFolder) {
+          const res = await apiFetch(`/api/folders/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: newName }),
+          })
+          if (res.ok) {
+            const updated = await res.json()
+            setFolders(prev => prev.map(f => f.id === id ? updated : f))
+          }
+        } else {
+          const res = await apiFetch(`/api/notebooks/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newName }),
+          })
+          if (res.ok) {
+            const updated = await res.json()
+            setNotebooks(prev => prev.map(nb => nb.id === id ? { ...nb, title: updated.title } : nb))
+          }
+        }
+        count++
+      }
+      toast({ type: 'success', message: `${selectedIds.size} items renamed` })
+    } catch (err) {
+      console.error(err)
+      toast({ type: 'error', message: 'Failed to rename some items' })
+    }
+  }, [folders, toast])
 
   // ------- Folder CRUD & Drop -------
 
@@ -295,22 +401,23 @@ function DashboardPage() {
       const newFolder = await res.json()
       setFolders((prev) => [...prev, newFolder])
       toast({ type: 'success', message: 'Folder created' })
+      return newFolder
     } catch (err) {
       console.error('Failed to create folder:', err)
       toast({ type: 'error', message: err.message })
     }
   }, [activeFolderId, toast])
 
-  const handleRenameFolder = useCallback(async (folder, newName) => {
+  const handleRenameFolder = useCallback(async (id, newName) => {
     try {
-      const res = await apiFetch(`/api/folders/${encodeURIComponent(folder.id)}`, {
+      const res = await apiFetch(`/api/folders/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName }),
       })
       if (!res.ok) throw new Error(`Rename failed`)
       const updated = await res.json()
-      setFolders((prev) => prev.map((f) => (f.id === folder.id ? updated : f)))
+      setFolders((prev) => prev.map((f) => (f.id === id ? updated : f)))
       toast({ type: 'success', message: 'Folder renamed' })
     } catch (err) {
       console.error('Failed to rename folder:', err)
@@ -348,20 +455,32 @@ function DashboardPage() {
     })
   }, [activeFolderId, toast])
 
-  const handleDropNotebook = useCallback(async (notebookId, folderId) => {
+  const handleDropItem = useCallback(async (itemId, itemType, targetFolderId) => {
     try {
-      const res = await apiFetch(`/api/notebooks/${encodeURIComponent(notebookId)}/folder`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folderId }),
-      })
-      if (!res.ok) throw new Error(`Move failed`)
-      setNotebooks((prev) =>
-        prev.map((nb) => (nb.id === notebookId ? { ...nb, folderId } : nb)),
-      )
-      toast({ type: 'success', message: 'Moved to folder' })
+      if (itemType === 'notebook') {
+        const res = await apiFetch(`/api/notebooks/${encodeURIComponent(itemId)}/folder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: targetFolderId }),
+        })
+        if (!res.ok) throw new Error(`Move notebook failed`)
+        setNotebooks((prev) =>
+          prev.map((nb) => (nb.id === itemId ? { ...nb, folderId: targetFolderId } : nb)),
+        )
+      } else if (itemType === 'folder') {
+        const res = await apiFetch(`/api/folders/${encodeURIComponent(itemId)}/move`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ parentId: targetFolderId }),
+        })
+        if (!res.ok) throw new Error(`Move folder failed`)
+        setFolders((prev) =>
+          prev.map((f) => (f.id === itemId ? { ...f, parentId: targetFolderId } : f)),
+        )
+      }
+      toast({ type: 'success', message: 'Moved successfully' })
     } catch (err) {
-      console.error('Failed to move notebook:', err)
+      console.error('Failed to move item:', err)
       toast({ type: 'error', message: err.message })
     }
   }, [toast])
@@ -378,6 +497,7 @@ function DashboardPage() {
       setNotebooks((prev) =>
         prev.map((nb) => (nb.id === notebookId ? { ...nb, tagIds: updated.tagIds } : nb)),
       )
+      toast({ type: 'success', message: 'Tags saved' })
     } catch (err) {
       console.error('Failed to update tags:', err)
       toast({ type: 'error', message: err.message })
@@ -419,9 +539,11 @@ function DashboardPage() {
             tagIds: (nb.tagIds || []).filter(tid => tid !== id)
           })))
           toast({ type: 'success', message: 'Tag deleted' })
+          closeConfirm()
         } catch (err) {
           console.error('Failed to delete tag:', err)
           toast({ type: 'error', message: err.message })
+          closeConfirm()
         }
       },
     })
@@ -526,7 +648,11 @@ function DashboardPage() {
         setNotebooks((prev) =>
           prev.map((nb) =>
             nb.id === activeNotebookId
-              ? { ...nb, documents: [...nb.documents, ...newDocs] }
+              ? { 
+                  ...nb, 
+                  documents: [...(nb.documents || []), ...newDocs],
+                  documentCount: (nb.documentCount || 0) + newDocs.length
+                }
               : nb,
           ),
         )
@@ -557,7 +683,11 @@ function DashboardPage() {
         setNotebooks((prev) =>
           prev.map((nb) =>
             nb.id === activeNotebookId
-              ? { ...nb, documents: [...nb.documents, { id: doc.id, title: doc.fileName, contentType: doc.contentType }] }
+              ? { 
+                  ...nb, 
+                  documents: [...(nb.documents || []), { id: doc.id, title: doc.fileName, contentType: doc.contentType }],
+                  documentCount: (nb.documentCount || 0) + 1
+                }
               : nb,
           ),
         )
@@ -591,8 +721,11 @@ function DashboardPage() {
           setNotebooks((prev) =>
             prev.map((nb) =>
               nb.id === activeNotebookId
-                ? { ...nb, documents: nb.documents.filter((d) => d.id !== docId) }
-                : nb,
+                ? { 
+                  ...nb, 
+                  documents: (nb.documents || []).filter((d) => d.id !== docId),
+                  documentCount: Math.max(0, (nb.documentCount || 1) - 1)
+                } : nb,
             ),
           )
           toast({ type: 'success', message: 'Document deleted successfully' })
@@ -854,9 +987,24 @@ function DashboardPage() {
           )}
         </div>
       ) : (
-        <section className="w-full px-4 py-6 sm:px-6 lg:px-8">
-          <div className="rounded-[10px] border border-[#242424] bg-[#0d0d0d]">
-            <NotebookLibrary
+        <section className={`flex h-[calc(100svh-4rem)] overflow-hidden ${isFolderDragging ? 'select-none cursor-col-resize' : ''}`}>
+          <div 
+            className={`shrink-0 h-full border-r border-[#242424] transition-[width] duration-300 ${isFolderDragging ? 'transition-none' : ''}`}
+            style={{ width: folderSidebarWidth }}
+          >
+            <FolderTreeSidebar 
+              folders={folders}
+              activeFolderId={activeFolderId}
+              onSelect={setActiveFolderId}
+              onDrop={handleDropItem}
+            />
+          </div>
+          <div 
+            className="w-1 h-full cursor-col-resize hover:bg-[#dffdee]/50 active:bg-[#b9f7d3] shrink-0 z-10 transition-colors"
+            onMouseDown={() => setIsFolderDragging(true)}
+          />
+          <div className="flex-1 h-full overflow-hidden">
+            <ExplorerView
               notebooks={notebooks}
               folders={folders}
               tags={tags}
@@ -870,11 +1018,13 @@ function DashboardPage() {
               onCreateFolder={handleCreateFolder}
               onRenameFolder={handleRenameFolder}
               onDeleteFolder={handleDeleteFolder}
-              onDropNotebook={handleDropNotebook}
+              onDropItem={handleDropItem}
               onUpdateNotebookTags={handleUpdateNotebookTags}
               onCreateTag={handleCreateTag}
               onDeleteTag={handleDeleteTag}
-              isCreatingNotebook={isCreatingNotebook}
+              onRefresh={fetchDashboardData}
+              onBulkDelete={handleBulkDelete}
+              onBulkRename={handleBulkRename}
             />
           </div>
         </section>
