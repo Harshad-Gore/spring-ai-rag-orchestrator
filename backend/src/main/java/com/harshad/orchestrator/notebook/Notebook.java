@@ -6,11 +6,18 @@ import java.util.UUID;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Table;
 
 @Entity
@@ -48,6 +55,14 @@ public class Notebook {
 	@Column(name = "cloned_from_email", length = 255)
 	private String clonedFromEmail;
 
+	@Column(name = "folder_id")
+	private UUID folderId;
+
+	@ElementCollection(fetch = FetchType.EAGER)
+	@CollectionTable(name = "notebook_tags", joinColumns = @JoinColumn(name = "notebook_id"))
+	@Column(name = "tag_id")
+	private List<UUID> tagIds = new ArrayList<>();
+
 	protected Notebook() {}
 
 	public Notebook(UUID userId, String title) {
@@ -73,4 +88,10 @@ public class Notebook {
 
 	public String getClonedFromEmail() { return clonedFromEmail; }
 	public void setClonedFromEmail(String clonedFromEmail) { this.clonedFromEmail = clonedFromEmail; }
+
+	public UUID getFolderId() { return folderId; }
+	public void setFolderId(UUID folderId) { this.folderId = folderId; }
+
+	public List<UUID> getTagIds() { return tagIds; }
+	public void setTagIds(List<UUID> tagIds) { this.tagIds = tagIds; }
 }

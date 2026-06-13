@@ -5,7 +5,9 @@ import {
   MoreVertical,
   Pencil,
   Trash2,
+  Tag as TagIcon
 } from 'lucide-react'
+import TagSelectionModal from './TagSelectionModal.jsx'
 
 function formatDate(dateString) {
   return new Date(dateString).toLocaleDateString('en-US', {
@@ -15,9 +17,10 @@ function formatDate(dateString) {
   })
 }
 
-function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' }) {
+function NotebookCard({ notebook, allTags = [], onOpen, onRename, onDelete, onUpdateTags, viewMode = 'grid' }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const [renameValue, setRenameValue] = useState(notebook.title)
   const menuRef = useRef(null)
   const renameInputRef = useRef(null)
@@ -54,6 +57,10 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
     setRenaming(false)
   }
 
+  const notebookTags = (notebook.tagIds || [])
+    .map(id => allTags.find(t => t.id === id))
+    .filter(Boolean)
+
   const docCount = notebook.documents?.length ?? 0
 
   const isList = viewMode.startsWith('list')
@@ -71,6 +78,10 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
 
   return (
     <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('notebookId', notebook.id)
+      }}
       className={`group relative flex cursor-pointer rounded-[10px] border border-[#242424] bg-[#0d0d0d] transition-all duration-200 hover:border-[#3a3a3a] hover:bg-[#121212] hover:shadow-[0_4px_24px_rgba(0,0,0,0.3)] ${
         isList ? `flex-row items-center justify-between ${paddingClass}` : `flex-col ${paddingClass}`
       }`}
@@ -116,6 +127,19 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
                 Cloned from {notebook.clonedFromEmail}
               </div>
             )}
+            {notebookTags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {notebookTags.map(tag => (
+                  <span 
+                    key={tag.id} 
+                    className="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+                    style={{ backgroundColor: `${tag.colorHex}20`, color: tag.colorHex, border: `1px solid ${tag.colorHex}40` }}
+                  >
+                    {tag.name}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -149,6 +173,18 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
                 >
                   <Pencil aria-hidden="true" className="size-3.5" />
                   Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
+                    setTagMenuOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[#c8cdc9] transition hover:bg-white/[0.06] hover:text-white"
+                >
+                  <TagIcon aria-hidden="true" className="size-3.5" />
+                  Tags
                 </button>
                 <button
                   type="button"
@@ -221,6 +257,18 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
                   onClick={(e) => {
                     e.stopPropagation()
                     setMenuOpen(false)
+                    setTagMenuOpen(true)
+                  }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-[#c8cdc9] transition hover:bg-white/[0.06] hover:text-white"
+                >
+                  <TagIcon aria-hidden="true" className="size-3.5" />
+                  Tags
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setMenuOpen(false)
                     onDelete(notebook.id)
                   }}
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-red-400 transition hover:bg-red-500/10 hover:text-red-300"
@@ -233,6 +281,16 @@ function NotebookCard({ notebook, onOpen, onRename, onDelete, viewMode = 'grid' 
           </div>
         )}
       </div>
+
+      {tagMenuOpen && (
+        <TagSelectionModal
+          isOpen={tagMenuOpen}
+          onClose={() => setTagMenuOpen(false)}
+          notebook={notebook}
+          allTags={allTags}
+          onUpdateTags={onUpdateTags}
+        />
+      )}
     </div>
   )
 }

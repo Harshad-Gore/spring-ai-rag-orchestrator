@@ -60,6 +60,24 @@ public class NotebookController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@PutMapping("/{id}/folder")
+	public NotebookResponse moveToFolder(
+			Authentication auth,
+			@PathVariable UUID id,
+			@RequestBody MoveToFolderRequest request) {
+		UUID userId = extractUserId(auth);
+		return NotebookResponse.from(notebookService.moveNotebookToFolder(id, userId, request.folderId()));
+	}
+
+	@PutMapping("/{id}/tags")
+	public NotebookResponse updateTags(
+			Authentication auth,
+			@PathVariable UUID id,
+			@RequestBody UpdateTagsRequest request) {
+		UUID userId = extractUserId(auth);
+		return NotebookResponse.from(notebookService.updateTags(id, userId, request.tagIds()));
+	}
+
 	@PostMapping("/{id}/share")
 	public ResponseEntity<ShareResponse> share(
 			Authentication auth,
@@ -83,9 +101,11 @@ public class NotebookController {
 
 	public record CreateRequest(String title) {}
 	public record RenameRequest(String title) {}
+	public record MoveToFolderRequest(UUID folderId) {}
+	public record UpdateTagsRequest(List<UUID> tagIds) {}
 	public record ShareRequest(String shareType, String sharedResources) {}
 	public record ShareResponse(String shareToken) {}
-	public record NotebookResponse(String id, String title, String createdAt, String shareToken, String shareType, String sharedResources, String clonedFromEmail) {
+	public record NotebookResponse(String id, String title, String createdAt, String shareToken, String shareType, String sharedResources, String clonedFromEmail, String folderId, List<String> tagIds) {
 		static NotebookResponse from(Notebook nb) {
 			return new NotebookResponse(
 				nb.getId().toString(),
@@ -94,7 +114,9 @@ public class NotebookController {
 				nb.getShareToken() != null ? nb.getShareToken().toString() : null,
 				nb.getShareType(),
 				nb.getSharedResources(),
-				nb.getClonedFromEmail()
+				nb.getClonedFromEmail(),
+				nb.getFolderId() != null ? nb.getFolderId().toString() : null,
+				nb.getTagIds().stream().map(UUID::toString).toList()
 			);
 		}
 	}

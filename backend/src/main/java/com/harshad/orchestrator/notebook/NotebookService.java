@@ -47,6 +47,28 @@ public class NotebookService {
 	}
 
 	@Transactional
+	public Notebook moveNotebookToFolder(UUID notebookId, UUID userId, UUID folderId) {
+		Notebook notebook = notebookRepository.findById(notebookId)
+			.orElseThrow(() -> new IllegalArgumentException("Notebook not found"));
+		if (!notebook.getUserId().equals(userId)) {
+			throw new SecurityException("Not authorized to modify this notebook");
+		}
+		notebook.setFolderId(folderId);
+		return notebookRepository.save(notebook);
+	}
+
+	@Transactional
+	public Notebook updateTags(UUID notebookId, UUID userId, List<UUID> tagIds) {
+		Notebook notebook = notebookRepository.findById(notebookId)
+			.orElseThrow(() -> new IllegalArgumentException("Notebook not found"));
+		if (!notebook.getUserId().equals(userId)) {
+			throw new SecurityException("Not authorized to modify this notebook");
+		}
+		notebook.setTagIds(tagIds);
+		return notebookRepository.save(notebook);
+	}
+
+	@Transactional
 	public String share(UUID notebookId, UUID userId, String shareType, String sharedResources) {
 		Notebook notebook = notebookRepository.findById(notebookId)
 			.orElseThrow(() -> new IllegalArgumentException("Notebook not found"));

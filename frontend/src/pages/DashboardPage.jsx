@@ -48,6 +48,9 @@ function DashboardPage() {
   // Core state
   const { notebookId: activeNotebookId } = useParams()
   const [notebooks, setNotebooks] = useState([])
+  const [folders, setFolders] = useState([])
+  const [tags, setTags] = useState([])
+  const [activeFolderId, setActiveFolderId] = useState(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebar_width')) || 320)
@@ -105,54 +108,72 @@ function DashboardPage() {
   // ------- Notebook CRUD -------
 
   const handleCreateNotebook = useCallback(async () => {
-    if (isCreatingNotebook) return
     setIsCreatingNotebook(true)
     try {
       const res = await apiFetch('/api/notebooks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: 'Untitled Notebook' }),
+        body: JSON.stringify({ title: 'New Notebook' }),
       })
       if (!res.ok) throw new Error(`Create failed: ${res.statusText}`)
-      const nb = await res.json()
-      setNotebooks((prev) => [
-        { ...nb, documents: [], chatHistory: [] },
-        ...prev,
-      ])
-      navigate(`/dashboard/${nb.id}`)
-      setSearchQuery('')
-      toast({ type: 'success', message: 'Notebook created successfully' })
+      let newNb = await res.json()
+
+      if (activeFolderId) {
+        const moveRes = await apiFetch(`/api/notebooks/${encodeURIComponent(newNb.id)}/folder`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderId: activeFolderId }),
+        })
+        if (moveRes.ok) {
+          newNb = await moveRes.json()
+        }
+      }
+
+      setNotebooks((prev) => [newNb, ...prev])
+      toast({ type: 'success', message: 'Notebook created' })
     } catch (err) {
       console.error('Failed to create notebook:', err)
-      toast({ type: 'error', message: `Failed to create notebook: ${err.message}` })
+      toast({ type: 'error', message: err.message })
     } finally {
       setIsCreatingNotebook(false)
     }
-  }, [isCreatingNotebook, toast])
+  }, [activeFolderId, toast])
 
   const handleOpenNotebook = useCallback((id) => {
     navigate(`/dashboard/${id}`)
     setSearchQuery('')
   }, [navigate])
 
-  // Fetch notebooks from database on mount
+  // Fetch notebooks, folders, and tags from database on mount
   useEffect(() => {
-    async function fetchNotebooks() {
+    async function fetchData() {
       try {
-        const res = await apiFetch('/api/notebooks')
-        if (res.ok) {
-          const data = await res.json()
+        const [nbRes, fRes, tRes] = await Promise.all([
+          apiFetch('/api/notebooks'),
+          apiFetch('/api/folders'),
+          apiFetch('/api/tags')
+        ])
+        if (nbRes.ok) {
+          const data = await nbRes.json()
           setNotebooks(
             data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
           )
         }
+        if (fRes.ok) {
+          const data = await fRes.json()
+          setFolders(data)
+        }
+        if (tRes.ok) {
+          const data = await tRes.json()
+          setTags(data)
+        }
       } catch (err) {
-        console.error('Failed to fetch notebooks:', err)
+        console.error('Failed to fetch data:', err)
       } finally {
         setIsLoadingNotebooks(false)
       }
     }
-    fetchNotebooks()
+    fetchData()
   }, [])
 
   const loadedNotebookIdRef = useRef(null)
@@ -210,14 +231,12 @@ function DashboardPage() {
       if (!res.ok) throw new Error(`Rename failed: ${res.statusText}`)
       const updated = await res.json()
       setNotebooks((prev) =>
-        prev.map((nb) =>
-          nb.id === id ? { ...nb, title: updated.title } : nb,
-        ),
+        prev.map((nb) => (nb.id === id ? { ...nb, title: updated.title } : nb)),
       )
-      toast({ type: 'success', message: 'Notebook renamed successfully' })
+      toast({ type: 'success', message: 'Notebook renamed' })
     } catch (err) {
       console.error('Failed to rename notebook:', err)
-      toast({ type: 'error', message: `Failed to rename notebook: ${err.message}` })
+      toast({ type: 'error', message: err.message })
     }
   }, [toast])
 
@@ -225,10 +244,9 @@ function DashboardPage() {
     setConfirmConfig({
       isOpen: true,
       title: 'Delete Notebook',
-      description: 'Are you sure you want to delete this notebook? All uploaded documents and chat history will be permanently deleted. This action cannot be undone.',
+      description: 'Are you sure you want to delete this notebook? This action cannot be undone.',
       isDestructive: true,
       onConfirm: async () => {
-        closeConfirm()
         try {
           const res = await apiFetch(`/api/notebooks/${encodeURIComponent(id)}`, {
             method: 'DELETE',
@@ -236,14 +254,159 @@ function DashboardPage() {
           if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`)
           setNotebooks((prev) => prev.filter((nb) => nb.id !== id))
           if (activeNotebookId === id) navigate('/dashboard')
-          toast({ type: 'success', message: 'Notebook deleted successfully' })
+          toast({ type: 'success', message: 'Notebook deleted' })
         } catch (err) {
           console.error('Failed to delete notebook:', err)
-          toast({ type: 'error', message: `Failed to delete notebook: ${err.message}` })
+          toast({ type: 'error', message: err.message })
         }
-      }
+      },
     })
-  }, [activeNotebookId, toast])
+  }, [activeNotebookId, navigate, toast])
+
+  // ------- Folder CRUD & Drop -------
+
+  const handleCreateFolder = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/folders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Folder', parentId: activeFolderId || null }),
+      })
+      if (!res.ok) throw new Error(`Create folder failed`)
+      const newFolder = await res.json()
+      setFolders((prev) => [...prev, newFolder])
+      toast({ type: 'success', message: 'Folder created' })
+    } catch (err) {
+      console.error('Failed to create folder:', err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [activeFolderId, toast])
+
+  const handleRenameFolder = useCallback(async (folder, newName) => {
+    try {
+      const res = await apiFetch(`/api/folders/${encodeURIComponent(folder.id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      })
+      if (!res.ok) throw new Error(`Rename failed`)
+      const updated = await res.json()
+      setFolders((prev) => prev.map((f) => (f.id === folder.id ? updated : f)))
+      toast({ type: 'success', message: 'Folder renamed' })
+    } catch (err) {
+      console.error('Failed to rename folder:', err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [toast])
+
+  const handleDeleteFolder = useCallback((id) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Delete Folder',
+      description: 'Are you sure you want to delete this folder? All notebooks and subfolders inside it will be permanently deleted.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          const res = await apiFetch(`/api/folders/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+          })
+          if (!res.ok) throw new Error(`Delete failed`)
+          
+          setFolders((prev) => prev.filter((f) => f.id !== id))
+          setNotebooks((prev) => prev.filter((nb) => nb.folderId !== id))
+          
+          if (activeFolderId === id) {
+            setActiveFolderId(null)
+          }
+          closeConfirm()
+          toast({ type: 'success', message: 'Folder and its contents deleted' })
+        } catch (err) {
+          console.error('Failed to delete folder:', err)
+          toast({ type: 'error', message: err.message })
+          closeConfirm()
+        }
+      },
+    })
+  }, [activeFolderId, toast])
+
+  const handleDropNotebook = useCallback(async (notebookId, folderId) => {
+    try {
+      const res = await apiFetch(`/api/notebooks/${encodeURIComponent(notebookId)}/folder`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderId }),
+      })
+      if (!res.ok) throw new Error(`Move failed`)
+      setNotebooks((prev) =>
+        prev.map((nb) => (nb.id === notebookId ? { ...nb, folderId } : nb)),
+      )
+      toast({ type: 'success', message: 'Moved to folder' })
+    } catch (err) {
+      console.error('Failed to move notebook:', err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [toast])
+
+  const handleUpdateNotebookTags = useCallback(async (notebookId, tagIds) => {
+    try {
+      const res = await apiFetch(`/api/notebooks/${encodeURIComponent(notebookId)}/tags`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tagIds }),
+      })
+      if (!res.ok) throw new Error(`Update tags failed`)
+      const updated = await res.json()
+      setNotebooks((prev) =>
+        prev.map((nb) => (nb.id === notebookId ? { ...nb, tagIds: updated.tagIds } : nb)),
+      )
+    } catch (err) {
+      console.error('Failed to update tags:', err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [toast])
+
+  const handleCreateTag = useCallback(async (name, colorHex) => {
+    try {
+      const res = await apiFetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, colorHex }),
+      })
+      if (!res.ok) throw new Error(`Create tag failed`)
+      const newTag = await res.json()
+      setTags((prev) => [...prev, newTag])
+      toast({ type: 'success', message: 'Tag created' })
+    } catch (err) {
+      console.error('Failed to create tag:', err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [toast])
+
+  const handleDeleteTag = useCallback((id) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Delete Tag',
+      description: 'Are you sure you want to delete this tag? It will be removed from all notebooks.',
+      isDestructive: true,
+      onConfirm: async () => {
+        try {
+          const res = await apiFetch(`/api/tags/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+          })
+          if (!res.ok) throw new Error(`Delete tag failed`)
+          setTags((prev) => prev.filter((t) => t.id !== id))
+          setNotebooks((prev) => prev.map(nb => ({
+            ...nb,
+            tagIds: (nb.tagIds || []).filter(tid => tid !== id)
+          })))
+          toast({ type: 'success', message: 'Tag deleted' })
+        } catch (err) {
+          console.error('Failed to delete tag:', err)
+          toast({ type: 'error', message: err.message })
+        }
+      },
+    })
+  }, [toast])
 
   const handleTogglePin = useCallback((docId) => {
     setPinnedDocIds((prev) => {
@@ -671,11 +834,22 @@ function DashboardPage() {
           <div className="rounded-[10px] border border-[#242424] bg-[#0d0d0d]">
             <NotebookLibrary
               notebooks={notebooks}
+              folders={folders}
+              tags={tags}
+              activeFolderId={activeFolderId}
+              setActiveFolderId={setActiveFolderId}
               searchQuery={searchQuery}
               onOpenNotebook={handleOpenNotebook}
               onCreateNotebook={handleCreateNotebook}
               onRenameNotebook={handleRenameNotebook}
               onDeleteNotebook={handleDeleteNotebook}
+              onCreateFolder={handleCreateFolder}
+              onRenameFolder={handleRenameFolder}
+              onDeleteFolder={handleDeleteFolder}
+              onDropNotebook={handleDropNotebook}
+              onUpdateNotebookTags={handleUpdateNotebookTags}
+              onCreateTag={handleCreateTag}
+              onDeleteTag={handleDeleteTag}
               isCreatingNotebook={isCreatingNotebook}
             />
           </div>
