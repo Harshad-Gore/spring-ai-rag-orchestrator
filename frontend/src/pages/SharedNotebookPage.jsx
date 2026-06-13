@@ -84,7 +84,13 @@ function SharedNotebookPage() {
       }
       const data = await res.json()
       toast({ type: 'success', message: 'Notebook cloned successfully!' })
-      navigate(`/dashboard/${data.newNotebookId}`)
+      // Pass existing chat + docs as seed state so dashboard shows them instantly
+      navigate(`/dashboard/${data.newNotebookId}`, {
+        state: {
+          seedChatHistory: notebook.chatHistory,
+          seedDocuments: notebook.documents,
+        }
+      })
     } catch (err) {
       toast({ type: 'error', message: err.message })
     } finally {

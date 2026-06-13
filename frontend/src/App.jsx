@@ -9,6 +9,7 @@ import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
 import SharedNotebookPage from './pages/SharedNotebookPage.jsx'
 import CustomCursor from './components/ui/CustomCursor.jsx'
+import { buildRedirectTarget, consumePostAuthRedirect, rememberPostAuthRedirect } from './lib/authRedirect.js'
 
 function AuthLoadingScreen() {
   return (
@@ -26,17 +27,29 @@ function ProtectedRoute({ children }) {
     return <AuthLoadingScreen />
   }
 
-  return isAuthenticated ? children : <Navigate to="/" state={{ from: location }} replace />
+  if (!isAuthenticated) {
+    rememberPostAuthRedirect(location)
+    return <Navigate to="/" state={{ from: location }} replace />
+  }
+
+  return children
 }
 
 function PublicOnlyRoute({ children }) {
   const { authReady, isAuthenticated } = useAuth()
+  const location = useLocation()
 
   if (!authReady) {
     return <AuthLoadingScreen />
   }
 
-  return isAuthenticated ? <Navigate to="/dashboard" replace /> : children
+  if (isAuthenticated) {
+    const stateTarget = location.state?.from ? buildRedirectTarget(location.state.from) : null
+    const redirectTarget = stateTarget || consumePostAuthRedirect() || '/dashboard'
+    return <Navigate to={redirectTarget} replace />
+  }
+
+  return children
 }
 
 function App() {

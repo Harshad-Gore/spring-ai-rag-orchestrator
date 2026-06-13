@@ -37,6 +37,38 @@ async function apiFetch(path, options = {}) {
   })
 }
 
+
+function summarizeDocuments(documents = []) {
+  const totalSizeBytes = documents.reduce((total, doc) => total + Number(doc.sizeBytes ?? 0), 0)
+  const primaryContentType = documents
+    .map((doc) => doc.contentType)
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b))[0] ?? null
+
+  return {
+    documentCount: documents.length,
+    totalSizeBytes,
+    primaryContentType,
+  }
+}
+
+function normalizeNotebook(notebook, existing = {}) {
+  const documents = notebook.documents ?? existing.documents ?? []
+  const chatHistory = notebook.chatHistory ?? existing.chatHistory ?? []
+  const fallbackSummary = summarizeDocuments(documents)
+
+  return {
+    ...existing,
+    ...notebook,
+    documents,
+    chatHistory,
+    documentCount: Number(notebook.documentCount ?? existing.documentCount ?? fallbackSummary.documentCount),
+    totalSizeBytes: Number(notebook.totalSizeBytes ?? existing.totalSizeBytes ?? fallbackSummary.totalSizeBytes),
+    primaryContentType: notebook.primaryContentType ?? existing.primaryContentType ?? fallbackSummary.primaryContentType,
+  }
+}
+
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -146,6 +178,7 @@ function DashboardPage() {
 
   // Fetch notebooks, folders, and tags from database on mount
   useEffect(() => {
+    let ignore = false;
     async function fetchData() {
       try {
         const [nbRes, fRes, tRes] = await Promise.all([
@@ -153,11 +186,13 @@ function DashboardPage() {
           apiFetch('/api/folders'),
           apiFetch('/api/tags')
         ])
+        if (ignore) return;
         if (nbRes.ok) {
           const data = await nbRes.json()
-          setNotebooks(
-            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
-          )
+          setNotebooks((prev) => data.map((nb) => {
+            const existing = prev.find(p => p.id === nb.id) || {};
+            return normalizeNotebook(nb, existing);
+          }))
         }
         if (fRes.ok) {
           const data = await fRes.json()
@@ -168,12 +203,16 @@ function DashboardPage() {
           setTags(data)
         }
       } catch (err) {
+        if (ignore) return;
         console.error('Failed to fetch data:', err)
       } finally {
-        setIsLoadingNotebooks(false)
+        if (!ignore) {
+          setIsLoadingNotebooks(false)
+        }
       }
     }
     fetchData()
+    return () => { ignore = true; }
   }, [])
 
   const loadedNotebookIdRef = useRef(null)

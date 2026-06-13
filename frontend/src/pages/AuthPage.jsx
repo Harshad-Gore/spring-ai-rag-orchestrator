@@ -1,6 +1,7 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 import AuthForm from '../components/auth/AuthForm.jsx'
 import { useAuth } from '../hooks/useAuth.js'
+import { buildRedirectTarget, consumePostAuthRedirect } from '../lib/authRedirect.js'
 
 function AuthPage() {
   const navigate = useNavigate()
@@ -17,7 +18,9 @@ function AuthPage() {
       })
     }
 
-    const from = location.state?.from?.pathname || '/dashboard'
+    const from = location.state?.from
+      ? buildRedirectTarget(location.state.from)
+      : consumePostAuthRedirect() || '/dashboard'
     navigate(from, { replace: true })
   }
 

@@ -53,6 +53,15 @@ public class NotebookFolderController {
 		return FolderResponse.from(folderService.rename(id, userId, request.name()));
 	}
 
+	@PutMapping("/{id}/parent")
+	public FolderResponse move(
+			Authentication auth,
+			@PathVariable UUID id,
+			@RequestBody MoveFolderRequest request) {
+		UUID userId = extractUserId(auth);
+		return FolderResponse.from(folderService.move(id, userId, request.parentId()));
+	}
+
 	@DeleteMapping("/{id}")
 	public ResponseEntity<Void> delete(Authentication auth, @PathVariable UUID id) {
 		UUID userId = extractUserId(auth);
@@ -66,6 +75,7 @@ public class NotebookFolderController {
 
 	public record CreateFolderRequest(String name, UUID parentId) {}
 	public record RenameFolderRequest(String name) {}
+	public record MoveFolderRequest(UUID parentId) {}
 	public record FolderResponse(String id, String parentId, String name, String createdAt) {
 		static FolderResponse from(NotebookFolder folder) {
 			return new FolderResponse(

@@ -17,6 +17,27 @@ function formatDate(dateString) {
   })
 }
 
+function formatSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
+function formatTypeLabel(value) {
+  if (!value) return 'Notebook'
+  if (value === 'video/youtube') return 'YouTube'
+  if (value === 'text/html') return 'Web'
+
+  const parts = value.split('/')
+  if (parts.length === 2) {
+    const [, subtype] = parts
+    return subtype.replace(/[-+.]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+  }
+
+  return value.replace(/[-_.]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function NotebookCard({ notebook, allTags = [], onOpen, onRename, onDelete, onUpdateTags, viewMode = 'grid' }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [renaming, setRenaming] = useState(false)
@@ -61,7 +82,9 @@ function NotebookCard({ notebook, allTags = [], onOpen, onRename, onDelete, onUp
     .map(id => allTags.find(t => t.id === id))
     .filter(Boolean)
 
-  const docCount = notebook.documents?.length ?? 0
+  const docCount = Number(notebook.documentCount ?? notebook.documents?.length ?? 0)
+  const typeLabel = formatTypeLabel(notebook.primaryContentType)
+  const sizeLabel = formatSize(Number(notebook.totalSizeBytes ?? 0))
 
   const isList = viewMode.startsWith('list')
   const isCompact = viewMode.endsWith('-compact')
@@ -206,12 +229,14 @@ function NotebookCard({ notebook, allTags = [], onOpen, onRename, onDelete, onUp
 
       <div className={`flex shrink-0 ${isList ? 'items-center ml-4 gap-4' : 'flex-col w-full'}`}>
         <div className={`flex items-center justify-between text-[#657069] ${dateClass} ${isList ? '' : 'w-full'}`}>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <span>{formatDate(notebook.createdAt)}</span>
             <span className="flex items-center gap-1">
               <FileText aria-hidden="true" className={isCompact ? 'size-2.5' : 'size-3'} />
               {docCount} {isList && !isCompact ? (docCount === 1 ? 'Document' : 'Documents') : 'Docs'}
             </span>
+            <span>{typeLabel}</span>
+            <span>{sizeLabel}</span>
           </div>
           
           {!isList && notebook.clonedFromEmail && (
