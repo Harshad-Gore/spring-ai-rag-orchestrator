@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { getStoredAuthToken } from '../services/authApi.js'
 import DashboardNavbar from '../components/dashboard/DashboardNavbar.jsx'
@@ -50,7 +50,16 @@ function DashboardPage() {
   const [notebooks, setNotebooks] = useState([])
   const [folders, setFolders] = useState([])
   const [tags, setTags] = useState([])
-  const [activeFolderId, setActiveFolderId] = useState(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeFolderId = searchParams.get('folder') || null
+
+  const setActiveFolderId = useCallback((id) => {
+    setSearchParams(prev => {
+      if (id) prev.set('folder', id)
+      else prev.delete('folder')
+      return prev
+    })
+  }, [setSearchParams])
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebar_width')) || 320)
@@ -140,9 +149,9 @@ function DashboardPage() {
   }, [activeFolderId, toast])
 
   const handleOpenNotebook = useCallback((id) => {
-    navigate(`/dashboard/${id}`)
+    navigate(activeFolderId ? `/dashboard/${id}?folder=${activeFolderId}` : `/dashboard/${id}`)
     setSearchQuery('')
-  }, [navigate])
+  }, [navigate, activeFolderId])
 
   // Fetch notebooks, folders, and tags from database on mount
   useEffect(() => {
@@ -155,8 +164,15 @@ function DashboardPage() {
         ])
         if (nbRes.ok) {
           const data = await nbRes.json()
-          setNotebooks(
-            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
+          setNotebooks((prev) => 
+            data.map((newNb) => {
+              const existing = prev.find(p => p.id === newNb.id)
+              return {
+                ...newNb,
+                documents: existing?.documents || [],
+                chatHistory: existing?.chatHistory || [],
+              }
+            })
           )
         }
         if (fRes.ok) {
@@ -253,7 +269,10 @@ function DashboardPage() {
           })
           if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`)
           setNotebooks((prev) => prev.filter((nb) => nb.id !== id))
-          if (activeNotebookId === id) navigate('/dashboard')
+          if (activeNotebookId === id) {
+            const targetFolderId = activeFolderId || activeNotebook?.folderId
+            navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard')
+          }
           toast({ type: 'success', message: 'Notebook deleted' })
         } catch (err) {
           console.error('Failed to delete notebook:', err)
@@ -422,9 +441,14 @@ function DashboardPage() {
     })
   }, [])
 
-  const handleGoHome = useCallback(() => {
+  const handleLogoClick = useCallback(() => {
     navigate('/dashboard')
   }, [navigate])
+
+  const handleBackToFolder = useCallback(() => {
+    const targetFolderId = activeFolderId || activeNotebook?.folderId
+    navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard')
+  }, [navigate, activeFolderId, activeNotebook])
 
   const handleShareNotebook = useCallback(async (shareType, sharedResources) => {
     if (!activeNotebookId) return
@@ -765,7 +789,7 @@ function DashboardPage() {
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
         onCreateNotebook={handleCreateNotebook}
-        onGoHome={handleGoHome}
+        onGoHome={handleLogoClick}
         onLogout={handleLogout}
         isCreatingNotebook={isCreatingNotebook}
         isLoading={isLoadingNotebook}
@@ -784,7 +808,7 @@ function DashboardPage() {
               notebook={activeNotebook}
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              onBack={handleGoHome}
+              onBack={handleBackToFolder}
               onOpenUpload={() => setShowUploadModal(true)}
               onOpenShare={() => setShowShareModal(true)}
               onRemoveDocument={handleRemoveDocument}
