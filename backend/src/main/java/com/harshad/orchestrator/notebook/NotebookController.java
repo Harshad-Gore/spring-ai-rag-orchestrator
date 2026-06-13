@@ -60,18 +60,41 @@ public class NotebookController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@PostMapping("/{id}/share")
+	public ResponseEntity<ShareResponse> share(
+			Authentication auth,
+			@PathVariable UUID id,
+			@RequestBody ShareRequest request) {
+		UUID userId = extractUserId(auth);
+		String token = notebookService.share(id, userId, request.shareType(), request.sharedResources());
+		return ResponseEntity.ok(new ShareResponse(token));
+	}
+
+	@PostMapping("/{id}/revoke")
+	public ResponseEntity<Void> revoke(Authentication auth, @PathVariable UUID id) {
+		UUID userId = extractUserId(auth);
+		notebookService.revoke(id, userId);
+		return ResponseEntity.noContent().build();
+	}
+
 	private UUID extractUserId(Authentication auth) {
 		return ((AuthenticatedUser) auth.getPrincipal()).id();
 	}
 
 	public record CreateRequest(String title) {}
 	public record RenameRequest(String title) {}
-	public record NotebookResponse(String id, String title, String createdAt) {
+	public record ShareRequest(String shareType, String sharedResources) {}
+	public record ShareResponse(String shareToken) {}
+	public record NotebookResponse(String id, String title, String createdAt, String shareToken, String shareType, String sharedResources, String clonedFromEmail) {
 		static NotebookResponse from(Notebook nb) {
 			return new NotebookResponse(
 				nb.getId().toString(),
 				nb.getTitle(),
-				nb.getCreatedAt().toString()
+				nb.getCreatedAt().toString(),
+				nb.getShareToken() != null ? nb.getShareToken().toString() : null,
+				nb.getShareType(),
+				nb.getSharedResources(),
+				nb.getClonedFromEmail()
 			);
 		}
 	}

@@ -17,8 +17,11 @@ body {
 }
 
 /* Hide native cursors for the custom JS cursor */
-* {
+*:not(.cursor-col-resize):not(.use-native-cursor):not(.use-native-cursor *) {
   cursor: none !important;
+}
+.cursor-col-resize {
+  cursor: col-resize !important;
 }
 
 * {

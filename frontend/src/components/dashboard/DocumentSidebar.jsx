@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, FileText, Globe, Pencil, Trash2, Upload, Video, Home, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { ChevronLeft, ChevronRight, FileText, Globe, Pencil, Trash2, Upload, Video, Home, PanelLeftClose, PanelLeftOpen, Share2 } from 'lucide-react'
 import { Button } from '../ui/button.jsx'
 
 function getDocIcon(doc) {
@@ -17,7 +17,7 @@ function getInitials(title) {
   return title.slice(0, 2).toUpperCase()
 }
 
-function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook, pinnedDocIds, onTogglePin }) {
+function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook, pinnedDocIds, onTogglePin, onOpenShare, readOnly }) {
   const documents = notebook?.documents ?? []
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(notebook?.title ?? '')
@@ -65,19 +65,19 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
             <button
               type="button"
               onClick={onBack}
-              title="Back to Dashboard"
+              title="Back"
               className="flex size-10 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#9aa39f] transition hover:bg-white/[0.08] hover:text-white focus:outline-none"
             >
-              <Home aria-hidden="true" className="size-5" />
+              <ChevronLeft aria-hidden="true" className="size-5" />
             </button>
           ) : (
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-2 rounded-md px-1.5 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-white/[0.06] hover:text-white focus:outline-none"
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-white/[0.06] hover:text-white focus:outline-none"
             >
-              <Home aria-hidden="true" className="size-4" />
-              Dashboard
+              <ChevronLeft aria-hidden="true" className="size-4" />
+              Back
             </button>
           )}
         </div>
@@ -130,19 +130,31 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
         )}
       </div>
 
-      {/* Upload button */}
-      <div className={`shrink-0 py-3 ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onOpenUpload}
-          title="Upload Source"
-          className={isCollapsed ? 'w-full px-0 flex justify-center' : 'w-full'}
-        >
-          <Upload aria-hidden="true" className="size-4" />
-          {!isCollapsed && <span className="ml-2">Upload</span>}
-        </Button>
-      </div>
+      {/* Action buttons */}
+      {!readOnly && (
+        <div className={`shrink-0 py-3 flex gap-2 ${isCollapsed ? 'px-2 flex-col' : 'px-4'}`}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onOpenUpload}
+            title="Upload Source"
+            className={isCollapsed ? 'w-full px-0 flex justify-center' : 'flex-1'}
+          >
+            <Upload aria-hidden="true" className="size-4" />
+            {!isCollapsed && <span className="ml-2">Upload</span>}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onOpenShare}
+            title="Share Notebook"
+            className={isCollapsed ? 'w-full px-0 flex justify-center border-[#2a4a34] bg-[#1a3023] text-[#58d68d] hover:bg-[#1e3a2a]' : 'flex-1 border-[#2a4a34] bg-[#1a3023] text-[#58d68d] hover:bg-[#1e3a2a]'}
+          >
+            <Share2 aria-hidden="true" className="size-4" />
+            {!isCollapsed && <span className="ml-2">Share</span>}
+          </Button>
+        </div>
+      )}
 
       {/* Document list */}
       <div className="flex-1 overflow-y-auto px-2">
@@ -169,31 +181,35 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
                       {doc.title}
                     </span>
                     {/* Pin checkbox */}
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onTogglePin(doc.id) }}
-                      title={pinnedDocIds.has(doc.id) ? 'Unpin from context' : 'Pin to context'}
-                      className={`flex size-4 shrink-0 items-center justify-center rounded border transition mr-1 focus:outline-none ${
-                        pinnedDocIds.has(doc.id)
-                          ? 'border-[#58d68d] bg-[#58d68d]/20 text-[#58d68d]'
-                          : 'border-[#333] bg-transparent text-transparent hover:border-[#58d68d]/50'
-                      }`}
-                      aria-label={pinnedDocIds.has(doc.id) ? `Unpin ${doc.title}` : `Pin ${doc.title}`}
-                    >
-                      {pinnedDocIds.has(doc.id) && (
-                        <svg viewBox="0 0 10 10" className="size-2.5" fill="none">
-                          <path d="M1.5 5.5L4 8l4.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
-                      className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
-                      aria-label={`Remove ${doc.title}`}
-                    >
-                      <Trash2 aria-hidden="true" className="size-3.5" />
-                    </button>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onTogglePin(doc.id) }}
+                        title={pinnedDocIds.has(doc.id) ? 'Unpin from context' : 'Pin to context'}
+                        className={`flex size-4 shrink-0 items-center justify-center rounded border transition mr-1 focus:outline-none ${
+                          pinnedDocIds.has(doc.id)
+                            ? 'border-[#58d68d] bg-[#58d68d]/20 text-[#58d68d]'
+                            : 'border-[#333] bg-transparent text-transparent hover:border-[#58d68d]/50'
+                        }`}
+                        aria-label={pinnedDocIds.has(doc.id) ? `Unpin ${doc.title}` : `Pin ${doc.title}`}
+                      >
+                        {pinnedDocIds.has(doc.id) && (
+                          <svg viewBox="0 0 10 10" className="size-2.5" fill="none">
+                            <path d="M1.5 5.5L4 8l4.5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </button>
+                    )}
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onRemoveDocument(doc.id); }}
+                        className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-red-500/10 hover:text-red-400 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[#b9f7d3]/25"
+                        aria-label={`Remove ${doc.title}`}
+                      >
+                        <Trash2 aria-hidden="true" className="size-3.5" />
+                      </button>
+                    )}
                   </>
                 )}
               </li>

@@ -24,6 +24,8 @@ function DashboardNavbar({
   onSearchChange,
   searchValue,
   isSettingsPage = false,
+  isSharedView = false,
+  ownerEmail = null,
   isLoading = false,
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -100,7 +102,12 @@ function DashboardNavbar({
 
         {/* Center: search or settings label */}
         <div className="ml-auto hidden flex-1 md:block lg:mx-4">
-          {!isSettingsPage ? (
+          {isSharedView ? (
+            <div className="flex flex-col items-center justify-center text-sm">
+              <span className="font-semibold text-white">Shared Notebook</span>
+              <span className="text-xs text-[#657069]">from {ownerEmail || 'Unknown User'}</span>
+            </div>
+          ) : !isSettingsPage ? (
             <div className="mx-auto max-w-sm">
               <Input
                 type="search"
@@ -121,7 +128,7 @@ function DashboardNavbar({
 
         {/* Right: create + profile */}
         <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
-          {!isSettingsPage && (
+          {!isSettingsPage && !isSharedView && (
             <>
               {/* Create Notebook — desktop */}
               <Button
@@ -213,14 +220,16 @@ function DashboardNavbar({
       {mobileOpen && (
         <div className="border-t border-[#242424] bg-[#090909] px-4 py-3 md:hidden">
           <div className="grid w-full gap-3">
-            <Input
-              type="search"
-              value={searchValue}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search notebooks…"
-              icon={Search}
-              aria-label="Search notebooks"
-            />
+            {!isSharedView && !isSettingsPage && (
+              <Input
+                type="search"
+                value={searchValue}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="Search notebooks…"
+                icon={Search}
+                aria-label="Search notebooks"
+              />
+            )}
             <button
               type="button"
               onClick={() => {

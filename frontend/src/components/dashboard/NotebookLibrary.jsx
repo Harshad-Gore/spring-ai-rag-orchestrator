@@ -1,5 +1,7 @@
+import { useState, useEffect, useRef } from 'react'
 import NotebookCard from './NotebookCard.jsx'
 import EmptyState from './EmptyState.jsx'
+import { LayoutGrid, List, ChevronDown, Check } from 'lucide-react'
 
 function NotebookLibrary({
   notebooks,
@@ -15,6 +17,35 @@ function NotebookLibrary({
       )
     : notebooks
 
+  const [viewMode, setViewMode] = useState(() => {
+    return localStorage.getItem('notebookViewMode') || 'grid'
+  })
+  const [viewMenuOpen, setViewMenuOpen] = useState(false)
+  const viewMenuRef = useRef(null)
+
+  useEffect(() => {
+    localStorage.setItem('notebookViewMode', viewMode)
+  }, [viewMode])
+
+  useEffect(() => {
+    if (!viewMenuOpen) return
+    function handleClick(e) {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target)) {
+        setViewMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [viewMenuOpen])
+
+  const viewOptions = [
+    { id: 'grid-large', label: 'Extra Large Icons' },
+    { id: 'grid', label: 'Medium Icons' },
+    { id: 'grid-compact', label: 'Small Icons' },
+    { id: 'list', label: 'List' },
+    { id: 'list-compact', label: 'Compact List' },
+  ]
+
   if (notebooks.length === 0) {
     return <EmptyState onCreateNotebook={onCreateNotebook} />
   }
@@ -24,9 +55,39 @@ function NotebookLibrary({
       {/* Section header */}
       <div className="mb-5 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-white">Your Notebooks</h2>
-        <span className="text-xs text-[#657069]">
-          {filtered.length} of {notebooks.length}
-        </span>
+        <div className="flex items-center gap-4">
+          <span className="text-xs text-[#657069]">
+            {filtered.length} of {notebooks.length}
+          </span>
+          <div className="relative" ref={viewMenuRef}>
+            <button
+              onClick={() => setViewMenuOpen(!viewMenuOpen)}
+              className="flex items-center gap-2 rounded-lg border border-[#242424] bg-[#0d0d0d] px-3 py-1.5 text-sm text-[#c8cdc9] transition hover:bg-[#1a1a1a] hover:text-white"
+            >
+              {viewMode.startsWith('list') ? <List className="size-4" /> : <LayoutGrid className="size-4" />}
+              <span>View</span>
+              <ChevronDown className="size-3 text-[#657069]" />
+            </button>
+
+            {viewMenuOpen && (
+              <div className="absolute right-0 top-full z-30 mt-2 w-48 overflow-hidden rounded-lg border border-[#242424] bg-[#111] shadow-[0_8px_32px_rgba(0,0,0,0.5)] py-1">
+                {viewOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    onClick={() => {
+                      setViewMode(opt.id)
+                      setViewMenuOpen(false)
+                    }}
+                    className="flex w-full items-center justify-between px-3 py-2 text-sm text-[#c8cdc9] transition hover:bg-white/[0.06] hover:text-white"
+                  >
+                    <span>{opt.label}</span>
+                    {viewMode === opt.id && <Check className="size-4 text-[#58d68d]" />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {filtered.length === 0 ? (
@@ -41,7 +102,12 @@ function NotebookLibrary({
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className={
+          viewMode === 'grid-large' ? "grid grid-cols-1 md:grid-cols-2 gap-6" :
+          viewMode === 'grid-compact' ? "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3" :
+          viewMode.startsWith('list') ? "flex flex-col gap-3" :
+          "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+        }>
           {filtered.map((nb) => (
             <NotebookCard
               key={nb.id}
@@ -49,6 +115,7 @@ function NotebookLibrary({
               onOpen={onOpenNotebook}
               onRename={onRenameNotebook}
               onDelete={onDeleteNotebook}
+              viewMode={viewMode}
             />
           ))}
         </div>

@@ -150,7 +150,7 @@ function UploadModal({ onClose, onUpload, onAddUrl }) {
             {/* Drop zone */}
             <div
               className={[
-                'flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors duration-200',
+                'flex cursor-pointer use-native-cursor flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-10 text-center transition-colors duration-200',
                 dragging
                   ? 'border-[#dffdee]/50 bg-[#dffdee]/[0.03]'
                   : 'border-[#2d2d2d] bg-[#0a0a0a] hover:border-[#3a3a3a]',

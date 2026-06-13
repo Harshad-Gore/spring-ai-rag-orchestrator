@@ -1,9 +1,10 @@
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import AuthForm from '../components/auth/AuthForm.jsx'
 import { useAuth } from '../hooks/useAuth.js'
 
 function AuthPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login, signup } = useAuth()
 
   async function handleAuthSubmit(mode, values) {
@@ -16,7 +17,8 @@ function AuthPage() {
       })
     }
 
-    navigate('/dashboard', { replace: true })
+    const from = location.state?.from?.pathname || '/dashboard'
+    navigate(from, { replace: true })
   }
 
   return (

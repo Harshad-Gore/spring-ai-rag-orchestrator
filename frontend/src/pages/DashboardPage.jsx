@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useState, useCallback, useEffect, useRef } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth.js'
 import { getStoredAuthToken } from '../services/authApi.js'
 import DashboardNavbar from '../components/dashboard/DashboardNavbar.jsx'
@@ -7,6 +7,7 @@ import NotebookLibrary from '../components/dashboard/NotebookLibrary.jsx'
 import DocumentSidebar from '../components/dashboard/DocumentSidebar.jsx'
 import ChatArena from '../components/dashboard/ChatArena.jsx'
 import UploadModal from '../components/dashboard/UploadModal.jsx'
+import ShareModal from '../components/dashboard/ShareModal.jsx'
 import { ConfirmationDialog } from '../components/ui/confirmation-dialog.jsx'
 import { useToast } from '../components/ui/toast.jsx'
 
@@ -45,13 +46,14 @@ function DashboardPage() {
   const { toast } = useToast()
 
   // Core state
+  const { notebookId: activeNotebookId } = useParams()
   const [notebooks, setNotebooks] = useState([])
-  const [activeNotebookId, setActiveNotebookId] = useState(() => localStorage.getItem('active_notebook_id'))
   const [searchQuery, setSearchQuery] = useState('')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
   const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem('sidebar_width')) || 320)
   const [isDragging, setIsDragging] = useState(false)
   const [showUploadModal, setShowUploadModal] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
   const [isLoadingNotebooks, setIsLoadingNotebooks] = useState(true)
   const [isLoadingNotebook, setIsLoadingNotebook] = useState(false)
   const [pinnedDocIds, setPinnedDocIds] = useState(() => new Set())
@@ -91,13 +93,7 @@ function DashboardPage() {
     }
   }, [isDragging])
 
-  useEffect(() => {
-    if (activeNotebookId) {
-      localStorage.setItem('active_notebook_id', activeNotebookId)
-    } else {
-      localStorage.removeItem('active_notebook_id')
-    }
-  }, [activeNotebookId])
+
 
 
 
@@ -123,7 +119,7 @@ function DashboardPage() {
         { ...nb, documents: [], chatHistory: [] },
         ...prev,
       ])
-      setActiveNotebookId(nb.id)
+      navigate(`/dashboard/${nb.id}`)
       setSearchQuery('')
       toast({ type: 'success', message: 'Notebook created successfully' })
     } catch (err) {
@@ -134,9 +130,43 @@ function DashboardPage() {
     }
   }, [isCreatingNotebook, toast])
 
-  const handleOpenNotebook = useCallback(async (id) => {
-    setActiveNotebookId(id)
+  const handleOpenNotebook = useCallback((id) => {
+    navigate(`/dashboard/${id}`)
     setSearchQuery('')
+  }, [navigate])
+
+  // Fetch notebooks from database on mount
+  useEffect(() => {
+    async function fetchNotebooks() {
+      try {
+        const res = await apiFetch('/api/notebooks')
+        if (res.ok) {
+          const data = await res.json()
+          setNotebooks(
+            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
+          )
+        }
+      } catch (err) {
+        console.error('Failed to fetch notebooks:', err)
+      } finally {
+        setIsLoadingNotebooks(false)
+      }
+    }
+    fetchNotebooks()
+  }, [])
+
+  const loadedNotebookIdRef = useRef(null)
+
+  useEffect(() => {
+    if (activeNotebookId && activeNotebookId !== loadedNotebookIdRef.current && notebooks.some(n => n.id === activeNotebookId)) {
+      loadedNotebookIdRef.current = activeNotebookId
+      handleOpenNotebookCore(activeNotebookId)
+    } else if (!activeNotebookId) {
+      loadedNotebookIdRef.current = null
+    }
+  }, [activeNotebookId, notebooks])
+
+  const handleOpenNotebookCore = useCallback(async (id) => {
     setIsLoadingNotebook(true)
     try {
       const [docsRes, chatRes] = await Promise.all([
@@ -162,7 +192,6 @@ function DashboardPage() {
             : nb,
         ),
       )
-      // Default all docs pinned
       setPinnedDocIds(new Set(docs.map((d) => d.id)))
     } catch (err) {
       console.error('Failed to fetch notebook data:', err)
@@ -170,32 +199,6 @@ function DashboardPage() {
       setIsLoadingNotebook(false)
     }
   }, [])
-
-  // Fetch notebooks from database on mount
-  useEffect(() => {
-    async function fetchNotebooks() {
-      try {
-        const res = await apiFetch('/api/notebooks')
-        if (res.ok) {
-          const data = await res.json()
-          setNotebooks(
-            data.map((nb) => ({ ...nb, documents: [], chatHistory: [] })),
-          )
-          const storedId = localStorage.getItem('active_notebook_id')
-          if (storedId && data.some(n => n.id === storedId)) {
-            handleOpenNotebook(storedId)
-          } else if (storedId) {
-            setActiveNotebookId(null)
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch notebooks:', err)
-      } finally {
-        setIsLoadingNotebooks(false)
-      }
-    }
-    fetchNotebooks()
-  }, [handleOpenNotebook])
 
   const handleRenameNotebook = useCallback(async (id, newTitle) => {
     try {
@@ -232,7 +235,7 @@ function DashboardPage() {
           })
           if (!res.ok) throw new Error(`Delete failed: ${res.statusText}`)
           setNotebooks((prev) => prev.filter((nb) => nb.id !== id))
-          if (activeNotebookId === id) setActiveNotebookId(null)
+          if (activeNotebookId === id) navigate('/dashboard')
           toast({ type: 'success', message: 'Notebook deleted successfully' })
         } catch (err) {
           console.error('Failed to delete notebook:', err)
@@ -257,8 +260,54 @@ function DashboardPage() {
   }, [])
 
   const handleGoHome = useCallback(() => {
-    setActiveNotebookId(null)
-  }, [])
+    navigate('/dashboard')
+  }, [navigate])
+
+  const handleShareNotebook = useCallback(async (shareType, sharedResources) => {
+    if (!activeNotebookId) return
+    try {
+      const res = await apiFetch(`/api/notebooks/${encodeURIComponent(activeNotebookId)}/share`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shareType, sharedResources }),
+      })
+      if (!res.ok) throw new Error(`Failed to share: ${res.statusText}`)
+      const data = await res.json()
+      setNotebooks((prev) =>
+        prev.map((nb) =>
+          nb.id === activeNotebookId
+            ? { ...nb, shareToken: data.shareToken, shareType, sharedResources }
+            : nb,
+        ),
+      )
+      toast({ type: 'success', message: 'Share link generated!' })
+    } catch (err) {
+      console.error(err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [activeNotebookId, toast])
+
+  const handleRevokeShare = useCallback(async () => {
+    if (!activeNotebookId) return
+    try {
+      const res = await apiFetch(`/api/notebooks/${encodeURIComponent(activeNotebookId)}/revoke`, {
+        method: 'POST'
+      })
+      if (!res.ok) throw new Error(`Failed to revoke: ${res.statusText}`)
+      setNotebooks((prev) =>
+        prev.map((nb) =>
+          nb.id === activeNotebookId
+            ? { ...nb, shareToken: null, shareType: null, sharedResources: null }
+            : nb,
+        ),
+      )
+      toast({ type: 'success', message: 'Share link revoked!' })
+      setShowShareModal(false)
+    } catch (err) {
+      console.error(err)
+      toast({ type: 'error', message: err.message })
+    }
+  }, [activeNotebookId, toast])
 
   // ------- Documents -------
 
@@ -562,7 +611,7 @@ function DashboardPage() {
       {activeNotebook ? (
         <div
           key={activeNotebook.id}
-          className="flex h-[calc(100svh-4rem)] relative animate-fade-in"
+          className={`flex h-[calc(100svh-4rem)] relative animate-fade-in ${isDragging ? 'select-none cursor-col-resize' : ''}`}
         >
           <div 
             className={`shrink-0 border-r border-[#242424] transition-[width] duration-300 ${isDragging ? 'transition-none' : ''}`}
@@ -574,6 +623,7 @@ function DashboardPage() {
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onBack={handleGoHome}
               onOpenUpload={() => setShowUploadModal(true)}
+              onOpenShare={() => setShowShareModal(true)}
               onRemoveDocument={handleRemoveDocument}
               onSendMessage={handleSendMessage}
               onRegenerate={handleRegenerate}
@@ -606,10 +656,19 @@ function DashboardPage() {
               onAddUrl={handleAddUrl}
             />
           )}
+
+          {showShareModal && activeNotebook && (
+            <ShareModal
+              notebook={activeNotebook}
+              onClose={() => setShowShareModal(false)}
+              onShare={handleShareNotebook}
+              onRevoke={handleRevokeShare}
+            />
+          )}
         </div>
       ) : (
-        <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6">
-          <div className="overflow-hidden rounded-[10px] border border-[#242424] bg-[#0d0d0d]">
+        <section className="w-full px-4 py-6 sm:px-6 lg:px-8">
+          <div className="rounded-[10px] border border-[#242424] bg-[#0d0d0d]">
             <NotebookLibrary
               notebooks={notebooks}
               searchQuery={searchQuery}

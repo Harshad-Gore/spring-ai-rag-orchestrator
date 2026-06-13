@@ -36,6 +36,18 @@ public class Notebook {
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
 
+	@Column(name = "share_token", unique = true)
+	private UUID shareToken;
+
+	@Column(name = "share_type", length = 32)
+	private String shareType;
+
+	@Column(name = "shared_resources", length = 128)
+	private String sharedResources;
+
+	@Column(name = "cloned_from_email", length = 255)
+	private String clonedFromEmail;
+
 	protected Notebook() {}
 
 	public Notebook(UUID userId, String title) {
@@ -49,4 +61,16 @@ public class Notebook {
 	public void setTitle(String title) { this.title = title; }
 	public Instant getCreatedAt() { return createdAt; }
 	public Instant getUpdatedAt() { return updatedAt; }
+
+	public UUID getShareToken() { return shareToken; }
+	public void setShareToken(UUID shareToken) { this.shareToken = shareToken; }
+
+	public String getShareType() { return shareType; }
+	public void setShareType(String shareType) { this.shareType = shareType; }
+
+	public String getSharedResources() { return sharedResources; }
+	public void setSharedResources(String sharedResources) { this.sharedResources = sharedResources; }
+
+	public String getClonedFromEmail() { return clonedFromEmail; }
+	public void setClonedFromEmail(String clonedFromEmail) { this.clonedFromEmail = clonedFromEmail; }
 }

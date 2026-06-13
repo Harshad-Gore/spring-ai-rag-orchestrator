@@ -251,7 +251,7 @@ const GROQ_MODELS = [
   { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B', tag: 'Efficient', tagColor: '#eb984e' },
 ]
 
-function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isLoading = false }) {
+function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isLoading = false, readOnly = false }) {
   const [inputValue, setInputValue] = useState('')
   const [selectedModel, setSelectedModel] = useState(() => {
     return localStorage.getItem('selected_model') || GROQ_MODELS[0].id
@@ -419,7 +419,7 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
                 </p>
               </div>
               <div className="flex flex-wrap justify-center gap-2">
-                {['Summarize the key points', 'What are the main topics?', 'Explain the core concepts'].map(hint => (
+                {!readOnly && ['Summarize the key points', 'What are the main topics?', 'Explain the core concepts'].map(hint => (
                   <button
                     key={hint}
                     type="button"
@@ -518,8 +518,8 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isBusy ? 'Generating response…' : 'Ask about your sources…'}
-              disabled={isBusy}
+              placeholder={readOnly ? 'Chat is disabled in view-only mode.' : isBusy ? 'Generating response…' : 'Ask about your sources…'}
+              disabled={isBusy || readOnly}
               rows={1}
               className="block max-h-48 min-h-[46px] w-full resize-none overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0f1210]/95 px-4 py-3 text-sm font-medium text-[#f0fdf4] caret-[#58d68d] outline-none transition placeholder:text-[#4a5a4e] focus:border-[#2a4a34] focus:bg-[#0d1510] focus:ring-2 focus:ring-[#58d68d]/10 disabled:cursor-not-allowed disabled:opacity-50"
             />
@@ -529,7 +529,7 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
             type="submit"
             variant="default"
             size="icon"
-            disabled={!inputValue.trim() || isBusy}
+            disabled={!inputValue.trim() || isBusy || readOnly}
             aria-label={isBusy ? 'Generating…' : 'Send message'}
             className="shrink-0 size-[46px] rounded-xl bg-[#1a3023] border-[#2a4a34] text-[#58d68d] hover:bg-[#1e3a2a] hover:border-[#3a6044] disabled:opacity-40"
           >

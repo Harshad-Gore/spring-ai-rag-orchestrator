@@ -24,6 +24,9 @@ export default function CustomCursor() {
       if (target.closest('input:disabled, button:disabled')) {
         setCursorType('unavailable')
         setIsHovering(false)
+      } else if (target.closest('.cursor-col-resize, .use-native-cursor')) {
+        setIsVisible(false)
+        return
       } else if (target.closest('a, button, [role="button"], label, select, .cursor-pointer')) {
         setCursorType('link')
         setIsHovering(true)
@@ -62,11 +65,23 @@ export default function CustomCursor() {
       setIsClicking(false)
     }
 
+    function onBlur() {
+      setIsVisible(false)
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        setIsVisible(false)
+      }
+    }
+
     window.addEventListener('mousemove', onMouseMove, { passive: true })
     document.addEventListener('mouseenter', onMouseEnter)
     document.addEventListener('mouseout', onMouseLeave)
     window.addEventListener('mousedown', onMouseDown)
     window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onVisibilityChange)
 
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
@@ -74,6 +89,8 @@ export default function CustomCursor() {
       document.removeEventListener('mouseout', onMouseLeave)
       window.removeEventListener('mousedown', onMouseDown)
       window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
   }, [isVisible])
 

@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from './hooks/useAuth.js'
 import AuthPage from './pages/AuthPage.jsx'
@@ -7,6 +7,7 @@ import VerifyEmailPage from './pages/VerifyEmailPage.jsx'
 import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx'
 import ResetPasswordPage from './pages/ResetPasswordPage.jsx'
 import SettingsPage from './pages/SettingsPage.jsx'
+import SharedNotebookPage from './pages/SharedNotebookPage.jsx'
 import CustomCursor from './components/ui/CustomCursor.jsx'
 
 function AuthLoadingScreen() {
@@ -19,12 +20,13 @@ function AuthLoadingScreen() {
 
 function ProtectedRoute({ children }) {
   const { authReady, isAuthenticated } = useAuth()
+  const location = useLocation()
 
   if (!authReady) {
     return <AuthLoadingScreen />
   }
 
-  return isAuthenticated ? children : <Navigate to="/" replace />
+  return isAuthenticated ? children : <Navigate to="/" state={{ from: location }} replace />
 }
 
 function PublicOnlyRoute({ children }) {
@@ -75,10 +77,18 @@ function App() {
         }
       />
       <Route
-        path="/dashboard"
+        path="/dashboard/:notebookId?"
         element={
           <ProtectedRoute>
             <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/shared/:shareToken"
+        element={
+          <ProtectedRoute>
+            <SharedNotebookPage />
           </ProtectedRoute>
         }
       />

@@ -45,4 +45,33 @@ public class NotebookService {
 		}
 		notebookRepository.delete(notebook);
 	}
+
+	@Transactional
+	public String share(UUID notebookId, UUID userId, String shareType, String sharedResources) {
+		Notebook notebook = notebookRepository.findById(notebookId)
+			.orElseThrow(() -> new IllegalArgumentException("Notebook not found"));
+		if (!notebook.getUserId().equals(userId)) {
+			throw new SecurityException("Not authorized to share this notebook");
+		}
+		if (notebook.getShareToken() == null) {
+			notebook.setShareToken(UUID.randomUUID());
+		}
+		notebook.setShareType(shareType);
+		notebook.setSharedResources(sharedResources);
+		notebookRepository.save(notebook);
+		return notebook.getShareToken().toString();
+	}
+
+	@Transactional
+	public void revoke(UUID notebookId, UUID userId) {
+		Notebook notebook = notebookRepository.findById(notebookId)
+			.orElseThrow(() -> new IllegalArgumentException("Notebook not found"));
+		if (!notebook.getUserId().equals(userId)) {
+			throw new SecurityException("Not authorized to modify this notebook");
+		}
+		notebook.setShareToken(null);
+		notebook.setShareType(null);
+		notebook.setSharedResources(null);
+		notebookRepository.save(notebook);
+	}
 }
