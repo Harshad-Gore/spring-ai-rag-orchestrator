@@ -284,6 +284,23 @@ public class ChatService {
 				.filter(c -> !hasPinFilter || pinnedDocIds.contains(c.getDocumentId()))
 				.toList();
 
+		// Fallback: If the user query was generic (e.g., "explain the documents") and matched no keywords,
+		// but they explicitly pinned documents (or there are just documents in the notebook), supply them.
+		if (chunks.isEmpty()) {
+			List<DocumentChunk> fallbackChunks = hasPinFilter 
+					? chunkRepository.findByDocumentIdIn(pinnedDocIds)
+					: chunkRepository.findByNotebookId(notebookId);
+
+			// Try to get the beginning of each document
+			chunks = fallbackChunks.stream()
+					.filter(c -> c.getChunkIndex() == 0 || c.getChunkIndex() == 1)
+					.toList();
+			
+			if (chunks.isEmpty()) {
+				chunks = new ArrayList<>(fallbackChunks);
+			}
+		}
+
 		if (chunks.size() > 5) {
 			chunks = chunks.subList(0, 5);
 		}

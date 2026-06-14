@@ -55,9 +55,9 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
   }
 
   return (
-    <aside className="flex h-full flex-col border-r border-[#242424] bg-[#090909] overflow-hidden">
+    <aside className="flex h-full flex-col border-r border-[#1a1a1a] bg-[#0d0d0d] overflow-hidden">
       {/* Header */}
-      <div className={`shrink-0 border-b border-[#242424] flex flex-col ${isCollapsed ? 'p-3 gap-4' : 'p-4 gap-4'}`}>
+      <div className={`shrink-0 border-b border-[#1a1a1a] flex flex-col ${isCollapsed ? 'p-3 gap-4' : 'p-4 gap-4'}`}>
         
         {/* Top bar: Back */}
         <div className={`flex items-center ${isCollapsed ? 'justify-center' : ''}`}>
@@ -66,7 +66,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
               type="button"
               onClick={onBack}
               title="Back"
-              className="flex size-10 items-center justify-center rounded-xl bg-[#1a1a1a] text-[#9aa39f] transition hover:bg-white/[0.08] hover:text-white focus:outline-none"
+              className="flex size-10 items-center justify-center rounded-xl bg-[#111] text-[#9aa39f] transition hover:bg-[#1a1a1a] hover:text-white focus:outline-none"
             >
               <ChevronLeft aria-hidden="true" className="size-5" />
             </button>
@@ -74,7 +74,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
             <button
               type="button"
               onClick={onBack}
-              className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-white/[0.06] hover:text-white focus:outline-none"
+              className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-[#1a1a1a] hover:text-white focus:outline-none"
             >
               <ChevronLeft aria-hidden="true" className="size-4" />
               Back
@@ -107,7 +107,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
                 <button
                   type="button"
                   onClick={() => setIsEditing(true)}
-                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-white/[0.08] hover:text-white focus:outline-none"
+                  className="flex size-6 shrink-0 items-center justify-center rounded-md text-[#657069] opacity-0 transition group-hover:opacity-100 hover:bg-[#1a1a1a] hover:text-white focus:outline-none"
                   aria-label="Rename notebook"
                 >
                   <Pencil aria-hidden="true" className="size-3.5" />
@@ -121,7 +121,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
         {isCollapsed && (
           <div className="flex justify-center pt-2 pb-1">
             <div 
-              className="flex size-10 items-center justify-center rounded-[10px] bg-gradient-to-b from-[#242424] to-[#111] border border-[#333] text-[#dffdee] font-bold text-[13px] shadow-sm select-none"
+              className="flex size-10 items-center justify-center rounded-[10px] bg-gradient-to-b from-[#242424] to-[#111] border border-[#1a1a1a] text-[#dffdee] font-bold text-[13px] shadow-sm select-none"
               title={notebook?.title ?? 'Notebook'}
             >
               {getInitials(notebook?.title)}
@@ -138,7 +138,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
             variant="outline"
             onClick={onOpenUpload}
             title="Upload Source"
-            className={isCollapsed ? 'w-full px-0 flex justify-center' : 'flex-1'}
+            className={isCollapsed ? 'w-full px-0 flex justify-center border-[#1a1a1a] bg-[#111] text-[#c8cdc9] hover:border-[#333] hover:bg-[#1a1a1a] hover:text-white' : 'flex-1 border-[#1a1a1a] bg-[#111] text-[#c8cdc9] hover:border-[#333] hover:bg-[#1a1a1a] hover:text-white'}
           >
             <Upload aria-hidden="true" className="size-4" />
             {!isCollapsed && <span className="ml-2">Upload</span>}
@@ -148,7 +148,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
             variant="outline"
             onClick={onOpenShare}
             title="Share Notebook"
-            className={isCollapsed ? 'w-full px-0 flex justify-center border-[#2a4a34] bg-[#1a3023] text-[#58d68d] hover:bg-[#1e3a2a]' : 'flex-1 border-[#2a4a34] bg-[#1a3023] text-[#58d68d] hover:bg-[#1e3a2a]'}
+            className={isCollapsed ? 'w-full px-0 flex justify-center border-[#2a4a34] bg-gradient-to-br from-[#1a3023] to-[#142519] text-[#58d68d] hover:border-[#3a6044] hover:to-[#1e3a2a] shadow-[0_2px_12px_rgba(0,0,0,0.3)]' : 'flex-1 border-[#2a4a34] bg-gradient-to-br from-[#1a3023] to-[#142519] text-[#58d68d] hover:border-[#3a6044] hover:to-[#1e3a2a] shadow-[0_2px_12px_rgba(0,0,0,0.3)]'}
           >
             <Share2 aria-hidden="true" className="size-4" />
             {!isCollapsed && <span className="ml-2">Share</span>}
@@ -172,14 +172,22 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
                 key={doc.id}
                 title={doc.title}
                 style={{ animationDelay: `${i * 40}ms` }}
-                className={`animate-fade-in group flex items-center rounded-lg transition hover:bg-white/[0.04] ${isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2.5'}`}
+                className={`animate-fade-in group flex items-center rounded-lg transition-colors hover:bg-[#1a1a1a] ${isCollapsed ? 'justify-center p-2' : 'gap-2.5 px-3 py-2.5'}`}
               >
                 {getDocIcon(doc)}
                 {!isCollapsed && (
                   <>
-                    <span className="min-w-0 flex-1 truncate text-sm text-[#c8cdc9]">
-                      {doc.title}
-                    </span>
+                    <div className="min-w-0 flex-1 flex flex-col justify-center">
+                      <span className={`truncate text-sm transition-colors ${doc.status === 'FAILED' ? 'text-red-400' : 'text-[#a2a8a5] group-hover:text-[#dffdee]'}`}>
+                        {doc.title}
+                      </span>
+                      {doc.status === 'FAILED' && (
+                        <span className="text-[10px] text-red-500/80 uppercase tracking-wide font-semibold mt-0.5">Processing Failed</span>
+                      )}
+                      {doc.status === 'PENDING' && (
+                        <span className="text-[10px] text-yellow-500/80 uppercase tracking-wide font-semibold mt-0.5">Processing...</span>
+                      )}
+                    </div>
                     {/* Pin checkbox */}
                     {!readOnly && (
                       <button
@@ -219,12 +227,12 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
       </div>
 
       {/* Footer Toggle */}
-      <div className={`shrink-0 border-t border-[#242424] flex ${isCollapsed ? 'justify-center p-3' : 'justify-end p-3'}`}>
+      <div className={`shrink-0 border-t border-[#1a1a1a] flex ${isCollapsed ? 'justify-center p-3' : 'justify-end p-3'}`}>
         <button
           type="button"
           onClick={onToggleCollapse}
           title={isCollapsed ? `Expand Sidebar (${notebook?.title || 'Notebook'})` : "Collapse Sidebar"}
-          className="flex size-8 items-center justify-center rounded-md text-[#657069] transition hover:bg-white/[0.08] hover:text-white focus:outline-none"
+          className="flex size-8 items-center justify-center rounded-md text-[#657069] transition hover:bg-[#1a1a1a] hover:text-white focus:outline-none"
         >
           {isCollapsed ? <PanelLeftOpen aria-hidden="true" className="size-5" /> : <PanelLeftClose aria-hidden="true" className="size-5" />}
         </button>

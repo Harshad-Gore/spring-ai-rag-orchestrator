@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useLayoutEffect, useCallback, memo, useMem
 import { Bot, ChevronDown, ChevronLeft, ChevronRight, Loader2, Send, Sparkles, User, Copy, RefreshCcw, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeRaw from 'rehype-raw'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { Button } from '../ui/button.jsx'
@@ -91,14 +92,18 @@ const MD_COMPONENTS = {
 // ---------------------------------------------------------------------------
 // Single message bubble
 // ---------------------------------------------------------------------------
-const MessageBubble = memo(function MessageBubble({ variants, isStreaming, fadeIn = false, fadeDelay = 0, isLatestAssistant, onRegenerate }) {
+const MessageBubble = memo(function MessageBubble({ variants, isStreaming, isThinking, fadeIn = false, fadeDelay = 0, isLatestAssistant, onRegenerate }) {
   const [variantIndex, setVariantIndex] = useState(variants ? variants.length - 1 : 0)
   
   useEffect(() => {
     if (variants) {
+      const lastVariant = variants[variants.length - 1]
+      if (isThinking && !lastVariant.content && variants.length > 1) {
+        return
+      }
       setVariantIndex(variants.length - 1)
     }
-  }, [variants?.length])
+  }, [variants?.length, isThinking])
 
   const msg = variants ? variants[variantIndex] : null
   if (!msg) return null
@@ -113,22 +118,22 @@ const MessageBubble = memo(function MessageBubble({ variants, isStreaming, fadeI
     >
       {/* Avatar — assistant side */}
       {!isUser && (
-        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#1e3a28] to-[#0e1f16] border border-[#2a4a34] mt-0.5 shadow-[0_0_12px_rgba(94,234,141,0.08)]">
-          <Bot aria-hidden="true" className="size-3.5 text-[#58d68d]" />
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-[#111] border border-[#242424] mt-0.5 shadow-sm">
+          <Bot aria-hidden="true" className="size-4 text-[#58d68d]" />
         </div>
       )}
 
       <div className={[
-        'relative max-w-[82%] min-h-[44px] rounded-2xl px-4 py-3 text-sm leading-7',
+        'relative min-h-[38px] rounded-2xl px-5 py-3 text-[14px] leading-relaxed shadow-sm transition-all',
         isUser
-          ? 'rounded-tr-sm bg-gradient-to-br from-[#1a3023] to-[#142519] border border-[#2a4a34] text-[#e8f5ed] shadow-[0_2px_12px_rgba(0,0,0,0.3)]'
-          : 'rounded-tl-sm bg-[#0f1710]/80 border border-[#1e2b20] text-[#c8cdc9] shadow-[0_2px_12px_rgba(0,0,0,0.3)] backdrop-blur-sm',
+          ? 'max-w-[80%] rounded-tr-sm bg-gradient-to-br from-[#1a3023] to-[#0e1c14] border border-[#2a4a34] text-[#e8f5ed]'
+          : 'flex-1 w-full max-w-none rounded-tl-sm bg-[#ffffff05] border border-white/[0.05] text-[#c8cdc9] backdrop-blur-md',
       ].join(' ')}>
         {isUser ? (
           <p className="whitespace-pre-wrap">{msg.content}</p>
         ) : (
-          <div className="prose prose-invert prose-p:leading-7 prose-headings:text-white prose-a:text-[#58d68d] max-w-none text-sm text-[#c8cdc9]">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>
+          <div className="prose prose-invert prose-p:leading-relaxed prose-headings:text-white prose-a:text-[#58d68d] max-w-none text-[14px] text-[#c8cdc9]">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]} components={MD_COMPONENTS}>
               {msg.content + (isStreaming ? ' ▍' : '')}
             </ReactMarkdown>
           </div>
@@ -260,7 +265,12 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
   const [isStreaming, setIsStreaming] = useState(false)        // tokens arriving
   const [streamingMsgId, setStreamingMsgId] = useState(null)
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState(false)
+  const [isInputVisible, setIsInputVisible] = useState(true)
+  const [visibleMessageCount, setVisibleMessageCount] = useState(50)
   const chatEndRef = useRef(null)
+  const lastScrollTop = useRef(0)
+  const previousScrollHeight = useRef(0)
+  const scrollRef = useRef(null)
   const inputRef = useRef(null)
   const abortRef = useRef(null)
   const modelDropdownRef = useRef(null)
@@ -292,7 +302,6 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
   const initialHistoryLength = useRef(0)
   const [historyReady, setHistoryReady] = useState(false)
   const [scrollReady, setScrollReady] = useState(false)
-  const scrollRef = useRef(null)
 
   const groupedHistory = useMemo(() => {
     if (!chatHistory) return []
@@ -325,9 +334,16 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
   // Jump to bottom instantly once history is ready
   useLayoutEffect(() => {
     if (!historyReady) return
-    if (chatScrollRef.current) {
-      chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+    const jump = () => {
+      if (chatScrollRef.current) {
+        chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+      }
     }
+    // Try multiple times to ensure we catch late-rendering markdown
+    jump()
+    setTimeout(jump, 50)
+    setTimeout(jump, 150)
+    setTimeout(jump, 300)
     setScrollReady(true)
   }, [historyReady])
 
@@ -369,9 +385,9 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
     setStreamingMsgId(msgId)
 
     // Add user msg + empty placeholder for streaming response
+    setIsStreaming(true)
     await onSendMessage(trimmed, selectedModel, msgId)
     setIsThinking(false)
-    setIsStreaming(true)
 
     inputRef.current?.focus()
   }, [inputValue, isThinking, isStreaming, selectedModel, onSendMessage])
@@ -393,8 +409,49 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
     }
   }, [isStreaming, streamingMsg])
 
+  // Turn off thinking state as soon as the first token arrives
+  useEffect(() => {
+    if (isThinking && streamingMsg && streamingMsg.content) {
+      setIsThinking(false)
+    }
+  }, [isThinking, streamingMsg])
+
+  const handleScroll = useCallback(() => {
+    const el = chatScrollRef.current
+    if (!el) return
+    
+    const st = el.scrollTop
+    const isScrollingUp = st < lastScrollTop.current
+    const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50
+    
+    if (isScrollingUp && !isAtBottom && st > 100) {
+      setIsInputVisible(false)
+    } else {
+      setIsInputVisible(true)
+    }
+    
+    if (st < 100 && visibleMessageCount < groupedHistory.length) {
+      previousScrollHeight.current = el.scrollHeight
+      setVisibleMessageCount(prev => prev + 20)
+    }
+    
+    lastScrollTop.current = st <= 0 ? 0 : st
+  }, [visibleMessageCount, groupedHistory.length])
+
+  // Preserve scroll position when loading older messages
+  useLayoutEffect(() => {
+    if (chatScrollRef.current && previousScrollHeight.current > 0) {
+      const el = chatScrollRef.current
+      const addedHeight = el.scrollHeight - previousScrollHeight.current
+      if (addedHeight > 0) {
+        el.scrollTop += addedHeight
+      }
+      previousScrollHeight.current = 0
+    }
+  }, [visibleMessageCount])
+
   return (
-    <div className="flex h-full flex-col bg-[#080908]">
+    <div className="flex h-full flex-col bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#111c15] to-[#080908] relative">
       {/* Wave animation keyframes injected inline */}
       <style>{`
         @keyframes wave {
@@ -404,12 +461,12 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
       `}</style>
 
       {/* ── Chat history ─────────────────────────────────────────── */}
-      <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
+      <div ref={chatScrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6">
         {isEmpty && !isBusy ? (
           /* Empty state */
           <div className="flex h-full items-center justify-center">
             <div className="flex flex-col items-center gap-5 text-center">
-              <div className="relative flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1e3a28] to-[#0a1810] border border-[#2a4a34] shadow-[0_0_30px_rgba(94,234,141,0.10)]">
+              <div className="relative flex size-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#1e3a28] to-[#0a1810] border border-[#2a4a34] shadow-[0_0_40px_rgba(88,214,141,0.25)]">
                 <Sparkles aria-hidden="true" className="size-7 text-[#58d68d]" />
               </div>
               <div>
@@ -433,23 +490,33 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
             </div>
           </div>
         ) : (
-          <div className="mx-auto max-w-4xl space-y-6">
-            {historyReady && groupedHistory.map((group, i) => {
+          <div className="mx-auto max-w-5xl px-4 sm:px-8 space-y-6">
+            {historyReady && groupedHistory.slice(-visibleMessageCount).map((group, i, arr) => {
               const hasStreamingVariant = group.variants.some(v => v.id === streamingMsgId)
-              if (isThinking && hasStreamingVariant && !group.variants.find(v => v.id === streamingMsgId)?.content) return null
-              const isLast = i === groupedHistory.length - 1
+              const streamingVariant = group.variants.find(v => v.id === streamingMsgId)
+              const isHidden = isThinking && hasStreamingVariant && group.variants.length === 1 && !streamingVariant?.content
+              if (isHidden) return null
+              
+              const isLast = i === arr.length - 1
               return (
                 <MessageBubble
                   key={group.id}
                   variants={group.variants}
                   isStreaming={isStreaming && hasStreamingVariant}
+                  isThinking={isThinking}
                   fadeIn={isLast && initialHistoryLength.current > 0}
                   fadeDelay={0}
                   isLatestAssistant={isLast && group.role === 'assistant'}
-                  onRegenerate={() => {
-                    const lastUserGroup = groupedHistory[i - 1]
+                  onRegenerate={async () => {
+                    const originalIndex = groupedHistory.findIndex(g => g.id === group.id)
+                    const lastUserGroup = groupedHistory[originalIndex - 1]
                     if (onRegenerate && lastUserGroup?.role === 'user') {
-                      onRegenerate(lastUserGroup.variants[0].content, selectedModel)
+                      const msgId = `stream-${Date.now()}`
+                      setStreamingMsgId(msgId)
+                      setIsThinking(true)
+                      setIsStreaming(true)
+                      await onRegenerate(lastUserGroup.variants[0].content, selectedModel, msgId)
+                      setIsThinking(false)
                     }
                   }}
                 />
@@ -459,89 +526,94 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
             {/* Thinking state — no tokens yet */}
             {isThinking && <ThinkingBubble />}
 
-            <div ref={chatEndRef} />
+            <div ref={chatEndRef} className="h-32" />
           </div>
         )}
       </div>
 
-      {/* ── Input bar ────────────────────────────────────────────── */}
-      <div className="shrink-0 border-t border-[#1a1a1a] bg-[#080908] px-4 py-3 sm:px-8">
-        <div className="mx-auto max-w-4xl flex items-center gap-2 pb-2">
-          <span className="text-[10px] font-medium uppercase tracking-wider text-[#657069]">Model</span>
-          <div className="relative" ref={modelDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
-              className="flex items-center gap-2 appearance-none cursor-pointer rounded-lg border border-[#242424] bg-[#111] px-3 py-1.5 text-xs font-medium text-[#c8cdc9] outline-none transition hover:border-[#3a3a3a] focus:border-[#2a4a34] focus:ring-1 focus:ring-[#58d68d]/20"
-            >
-              {GROQ_MODELS.find(m => m.id === selectedModel)?.label} — {GROQ_MODELS.find(m => m.id === selectedModel)?.tag}
-              <ChevronDown className={`size-3.5 text-[#657069] transition-transform ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            
-            {isModelDropdownOpen && (
-              <div className="absolute left-0 bottom-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-[#242424] bg-[#0f1210] shadow-[0_-10px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
-                <div className="p-1.5 space-y-0.5">
-                  {GROQ_MODELS.map(m => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedModel(m.id)
-                        setIsModelDropdownOpen(false)
-                      }}
-                      className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${
-                        selectedModel === m.id
-                          ? 'bg-[#1a2e21] text-[#58d68d] font-medium'
-                          : 'text-[#c8cdc9] hover:bg-[#161a17] hover:text-[#f0fdf4]'
-                      }`}
-                    >
-                      {m.label}
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
-                        selectedModel === m.id ? 'bg-[#58d68d]/20 text-[#58d68d]' : 'bg-[#1a1a1a] text-[#657069]'
-                      }`}>
-                        {m.tag}
-                      </span>
-                    </button>
-                  ))}
+      {/* ── Floating Input bar ────────────────────────────────────────────── */}
+      <div className={`absolute bottom-6 left-1/2 -translate-x-1/2 w-full max-w-5xl px-4 sm:px-8 z-20 pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.23,1,0.32,1)] ${isInputVisible ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-[120%] opacity-0 scale-95'}`}>
+        <div className="sm:px-[44px]">
+          <div className="pointer-events-auto rounded-3xl bg-[#0a0c0b]/90 backdrop-blur-xl border border-white/[0.06] shadow-[0_12px_40px_rgba(0,0,0,0.6)] p-2">
+            {/* Top row: Model selector */}
+          <div className="flex items-center justify-between px-2 pb-1">
+            <div className="relative" ref={modelDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsModelDropdownOpen(!isModelDropdownOpen)}
+                className="group flex items-center gap-1.5 appearance-none cursor-pointer rounded-full bg-transparent px-2 py-1 text-xs font-medium text-[#9aa39f] outline-none transition hover:text-[#dffdee]"
+              >
+                {GROQ_MODELS.find(m => m.id === selectedModel)?.label}
+                <ChevronDown className={`size-3 text-[#657069] transition-transform group-hover:text-[#9aa39f] ${isModelDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              
+              {isModelDropdownOpen && (
+                <div className="absolute left-0 bottom-[calc(100%+0.5rem)] z-50 w-56 overflow-hidden rounded-xl border border-[#242424] bg-[#0f1210]/95 shadow-[0_-10px_40px_rgba(0,0,0,0.8)] backdrop-blur-xl">
+                  <div className="p-1.5 space-y-0.5">
+                    {GROQ_MODELS.map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedModel(m.id)
+                          setIsModelDropdownOpen(false)
+                        }}
+                        className={`flex w-full cursor-pointer items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition ${
+                          selectedModel === m.id
+                            ? 'bg-[#1a2e21] text-[#58d68d] font-medium'
+                            : 'text-[#c8cdc9] hover:bg-[#161a17] hover:text-[#f0fdf4]'
+                        }`}
+                      >
+                        {m.label}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${
+                          selectedModel === m.id ? 'bg-[#58d68d]/20 text-[#58d68d]' : 'bg-[#1a1a1a] text-[#657069]'
+                        }`}>
+                          {m.tag}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </div>
-        <form
-          onSubmit={(e) => { e.preventDefault(); handleSend() }}
-          className="mx-auto flex max-w-4xl items-end gap-2"
-        >
-          <div className="relative flex-1">
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={readOnly ? 'Chat is disabled in view-only mode.' : isBusy ? 'Generating response…' : 'Ask about your sources…'}
-              disabled={isBusy || readOnly}
-              rows={1}
-              className="block max-h-48 min-h-[46px] w-full resize-none overflow-y-auto rounded-xl border border-white/[0.08] bg-[#0f1210]/95 px-4 py-3 text-sm font-medium text-[#f0fdf4] caret-[#58d68d] outline-none transition placeholder:text-[#4a5a4e] focus:border-[#2a4a34] focus:bg-[#0d1510] focus:ring-2 focus:ring-[#58d68d]/10 disabled:cursor-not-allowed disabled:opacity-50"
-            />
+              )}
+            </div>
           </div>
 
-          <Button
-            type="submit"
-            variant="default"
-            size="icon"
-            disabled={!inputValue.trim() || isBusy || readOnly}
-            aria-label={isBusy ? 'Generating…' : 'Send message'}
-            className="shrink-0 size-[46px] rounded-xl bg-[#1a3023] border-[#2a4a34] text-[#58d68d] hover:bg-[#1e3a2a] hover:border-[#3a6044] disabled:opacity-40"
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleSend() }}
+            className="flex items-end gap-2"
           >
-            {isBusy ? (
-              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <Send aria-hidden="true" className="size-4" />
-            )}
-          </Button>
-        </form>
+            <div className="relative flex-1">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={readOnly ? 'Chat is disabled in view-only mode.' : isBusy ? 'Generating response…' : 'Ask about your sources…'}
+                disabled={isBusy || readOnly}
+                rows={1}
+                className="block max-h-40 min-h-[44px] w-full resize-none overflow-y-auto rounded-2xl bg-transparent px-4 py-3 text-[14px] font-medium text-[#f0fdf4] caret-[#58d68d] outline-none transition placeholder:text-[#4a5a4e] disabled:cursor-not-allowed disabled:opacity-50"
+              />
+            </div>
+
+            <Button
+              type="submit"
+              variant="default"
+              size="icon"
+              disabled={!inputValue.trim() || isBusy || readOnly}
+              aria-label={isBusy ? 'Generating…' : 'Send message'}
+              className="shrink-0 size-[44px] mb-0.5 mr-0.5 rounded-2xl bg-gradient-to-br from-[#1a3023] to-[#142519] border border-[#2a4a34] text-[#58d68d] hover:border-[#3a6044] hover:to-[#1e3a2a] disabled:opacity-40 transition-all shadow-sm"
+            >
+              {isBusy ? (
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <Send aria-hidden="true" className="size-4 ml-0.5" />
+              )}
+            </Button>
+          </form>
+        </div>
       </div>
     </div>
+  </div>
   )
 }
 

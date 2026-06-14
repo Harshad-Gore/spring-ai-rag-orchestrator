@@ -7,7 +7,7 @@ import TagSelectionModal from './TagSelectionModal.jsx'
 import ContextMenu from './ContextMenu.jsx'
 import { PromptDialog } from '../ui/prompt-dialog.jsx'
 import { LayoutGrid, List as ListIcon, ChevronDown, Check, ChevronRight, FolderPlus, FilePlus, Tags, ArrowLeft, ArrowRight, ArrowUp, Folder, FileText, Monitor, Grid, AlignLeft, AlignJustify, ArrowDownUp, RotateCw, Plus } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 
 function formatSize(notebook) {
   const count = notebook.documentCount ?? notebook.documents?.length ?? 0
@@ -43,6 +43,7 @@ export default function ExplorerView({
   onBulkRename,
 }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const [showManageTags, setShowManageTags] = useState(false)
   const [tagSelectionItem, setTagSelectionItem] = useState(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -62,8 +63,9 @@ export default function ExplorerView({
   const [newMenuOpen, setNewMenuOpen] = useState(false)
   const sortMenuRef = useRef(null)
   
-  const [selectedIds, setSelectedIds] = useState(new Set())
-  const [lastSelectedId, setLastSelectedId] = useState(null)
+  const initialHighlightedNotebookId = location.state?.highlightedNotebookId
+  const [selectedIds, setSelectedIds] = useState(() => new Set(initialHighlightedNotebookId ? [initialHighlightedNotebookId] : []))
+  const [lastSelectedId, setLastSelectedId] = useState(initialHighlightedNotebookId || null)
   const prevFolderIdRef = useRef(activeFolderId)
 
   useEffect(() => {

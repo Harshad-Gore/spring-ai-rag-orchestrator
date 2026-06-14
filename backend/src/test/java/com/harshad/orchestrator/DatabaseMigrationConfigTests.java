@@ -13,7 +13,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 	"spring.flyway.locations=classpath:test-migration",
 	"spring.ai.openai.base-url=http://localhost",
 	"spring.ai.openai.api-key=test",
-	"spring.ai.openai.chat.options.model=test",
+	"spring.ai.vectorstore.pgvector.initialize-schema=false",
 	"app.auth.jwt-secret=test-secret-that-is-long-enough-for-hmac-signing-123456"
 })
 class DatabaseMigrationConfigTests {

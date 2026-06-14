@@ -95,18 +95,32 @@ function DashboardPage() {
     localStorage.setItem('folder_sidebar_width', folderSidebarWidth)
   }, [folderSidebarWidth])
 
+  const sidebarRef = useRef(null)
+  const folderSidebarRef = useRef(null)
+
   useEffect(() => {
     if (!isDragging) return
+    let animationFrameId
     const handleMouseMove = (e) => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId)
+      animationFrameId = requestAnimationFrame(() => {
+        let newWidth = e.clientX
+        if (newWidth < 200) newWidth = 200
+        if (newWidth > 600) newWidth = 600
+        if (sidebarRef.current) sidebarRef.current.style.width = `${newWidth}px`
+      })
+    }
+    const handleMouseUp = (e) => {
       let newWidth = e.clientX
       if (newWidth < 200) newWidth = 200
       if (newWidth > 600) newWidth = 600
       setSidebarWidth(newWidth)
+      setIsDragging(false)
     }
-    const handleMouseUp = () => setIsDragging(false)
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -114,16 +128,27 @@ function DashboardPage() {
 
   useEffect(() => {
     if (!isFolderDragging) return
+    let animationFrameId
     const handleMouseMove = (e) => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId)
+      animationFrameId = requestAnimationFrame(() => {
+        let newWidth = e.clientX
+        if (newWidth < 180) newWidth = 180
+        if (newWidth > 500) newWidth = 500
+        if (folderSidebarRef.current) folderSidebarRef.current.style.width = `${newWidth}px`
+      })
+    }
+    const handleMouseUp = (e) => {
       let newWidth = e.clientX
       if (newWidth < 180) newWidth = 180
       if (newWidth > 500) newWidth = 500
       setFolderSidebarWidth(newWidth)
+      setIsFolderDragging(false)
     }
-    const handleMouseUp = () => setIsFolderDragging(false)
     document.addEventListener('mousemove', handleMouseMove)
     document.addEventListener('mouseup', handleMouseUp)
     return () => {
+      if (animationFrameId) cancelAnimationFrame(animationFrameId)
       document.removeEventListener('mousemove', handleMouseMove)
       document.removeEventListener('mouseup', handleMouseUp)
     }
@@ -569,8 +594,8 @@ function DashboardPage() {
 
   const handleBackToFolder = useCallback(() => {
     const targetFolderId = activeFolderId || activeNotebook?.folderId
-    navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard')
-  }, [navigate, activeFolderId, activeNotebook])
+    navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard', { state: { highlightedNotebookId: activeNotebookId } })
+  }, [navigate, activeFolderId, activeNotebook, activeNotebookId])
 
   const handleShareNotebook = useCallback(async (shareType, sharedResources) => {
     if (!activeNotebookId) return
@@ -829,12 +854,12 @@ function DashboardPage() {
     [activeNotebookId, pinnedDocIds],
   )
 
-  const handleRegenerate = useCallback(async (notebookId, text, model) => {
+  const handleRegenerate = useCallback(async (notebookId, text, model, streamingMsgId) => {
     if (!notebookId) return
 
     const notebookIdAtSend = notebookId
     const pinnedAtSend = [...pinnedDocIds]
-    const aiMsgId = `stream-${Date.now()}`
+    const aiMsgId = streamingMsgId ?? `stream-${Date.now()}`
     const aiMsg = { id: aiMsgId, role: 'assistant', content: '', citations: [], done: false }
 
     setNotebooks((prev) =>
@@ -933,8 +958,9 @@ function DashboardPage() {
           key={activeNotebook.id}
           className={`flex h-[calc(100svh-4rem)] relative animate-fade-in ${isDragging ? 'select-none cursor-col-resize' : ''}`}
         >
-          <div 
-            className={`shrink-0 border-r border-[#242424] transition-[width] duration-300 ${isDragging ? 'transition-none' : ''}`}
+          <div
+            ref={sidebarRef}
+            className={`shrink-0 border-r border-[#1a1a1a] transition-[width] duration-300 ${isDragging ? 'transition-none' : ''}`}
             style={{ width: isSidebarCollapsed ? 64 : sidebarWidth }}
           >
             <DocumentSidebar
@@ -962,7 +988,7 @@ function DashboardPage() {
             <ChatArena
               chatHistory={activeNotebook.chatHistory || []}
               onSendMessage={handleSendMessage}
-              onRegenerate={(text, model) => handleRegenerate(activeNotebook.id, text, model)}
+              onRegenerate={(text, model, msgId) => handleRegenerate(activeNotebook.id, text, model, msgId)}
               pinnedDocIds={pinnedDocIds}
               onRenameNotebook={handleRenameNotebook}
               isLoading={isLoadingNotebook}
