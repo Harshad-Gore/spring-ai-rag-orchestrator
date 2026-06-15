@@ -84,7 +84,7 @@ function SharedNotebookPage() {
       }
       const data = await res.json()
       toast({ type: 'success', message: 'Notebook cloned successfully!' })
-      navigate(`/dashboard/${data.newNotebookId}`)
+      navigate(`/notebook/${data.newNotebookId}`)
     } catch (err) {
       toast({ type: 'error', message: err.message })
     } finally {

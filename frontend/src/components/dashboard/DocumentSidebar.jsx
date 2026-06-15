@@ -17,7 +17,7 @@ function getInitials(title) {
   return title.slice(0, 2).toUpperCase()
 }
 
-function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOpenUpload, onRemoveDocument, onRenameNotebook, pinnedDocIds, onTogglePin, onOpenShare, readOnly }) {
+function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, backLabel = 'Back', onOpenUpload, onRemoveDocument, onRenameNotebook, pinnedDocIds, onTogglePin, onOpenShare, readOnly }) {
   const documents = notebook?.documents ?? []
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(notebook?.title ?? '')
@@ -77,7 +77,7 @@ function DocumentSidebar({ notebook, isCollapsed, onToggleCollapse, onBack, onOp
               className="inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-sm font-medium text-[#9aa39f] transition hover:bg-[#1a1a1a] hover:text-white focus:outline-none"
             >
               <ChevronLeft aria-hidden="true" className="size-4" />
-              Back
+              {backLabel}
             </button>
           )}
         </div>

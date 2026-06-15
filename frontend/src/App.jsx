@@ -77,7 +77,23 @@ function App() {
         }
       />
       <Route
-        path="/dashboard/:notebookId?"
+        path="/dashboard"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notebook/:notebookId"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/notebook/:appId/:notebookId"
         element={
           <ProtectedRoute>
             <DashboardPage />

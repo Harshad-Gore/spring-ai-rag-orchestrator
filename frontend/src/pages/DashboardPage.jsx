@@ -7,6 +7,7 @@ import ExplorerView from '../components/dashboard/ExplorerView.jsx'
 import FolderTreeSidebar from '../components/dashboard/FolderTreeSidebar.jsx'
 import DocumentSidebar from '../components/dashboard/DocumentSidebar.jsx'
 import ChatArena from '../components/dashboard/ChatArena.jsx'
+import AppSelector from '../components/dashboard/AppSelector.jsx'
 import UploadModal from '../components/dashboard/UploadModal.jsx'
 import ShareModal from '../components/dashboard/ShareModal.jsx'
 import { ConfirmationDialog } from '../components/ui/confirmation-dialog.jsx'
@@ -47,7 +48,7 @@ function DashboardPage() {
   const { toast } = useToast()
 
   // Core state
-  const { notebookId: activeNotebookId } = useParams()
+  const { notebookId: activeNotebookId, appId } = useParams()
   const [notebooks, setNotebooks] = useState([])
   const [folders, setFolders] = useState([])
   const [tags, setTags] = useState([])
@@ -199,7 +200,7 @@ function DashboardPage() {
   }, [activeFolderId, toast])
 
   const handleOpenNotebook = useCallback((id) => {
-    navigate(activeFolderId ? `/dashboard/${id}?folder=${activeFolderId}` : `/dashboard/${id}`)
+    navigate(activeFolderId ? `/notebook/${id}?folder=${activeFolderId}` : `/notebook/${id}`)
     setSearchQuery('')
   }, [navigate, activeFolderId])
 
@@ -593,9 +594,13 @@ function DashboardPage() {
   }, [navigate])
 
   const handleBackToFolder = useCallback(() => {
-    const targetFolderId = activeFolderId || activeNotebook?.folderId
-    navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard', { state: { highlightedNotebookId: activeNotebookId } })
-  }, [navigate, activeFolderId, activeNotebook, activeNotebookId])
+    if (appId) {
+      navigate(activeFolderId ? `/notebook/${activeNotebookId}?folder=${activeFolderId}` : `/notebook/${activeNotebookId}`)
+    } else {
+      const targetFolderId = activeFolderId || activeNotebook?.folderId
+      navigate(targetFolderId ? `/dashboard?folder=${targetFolderId}` : '/dashboard', { state: { highlightedNotebookId: activeNotebookId } })
+    }
+  }, [navigate, activeFolderId, activeNotebook, activeNotebookId, appId])
 
   const handleShareNotebook = useCallback(async (shareType, sharedResources) => {
     if (!activeNotebookId) return
@@ -968,6 +973,7 @@ function DashboardPage() {
               isCollapsed={isSidebarCollapsed}
               onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
               onBack={handleBackToFolder}
+              backLabel={appId ? 'Apps' : 'Explorer'}
               onOpenUpload={() => setShowUploadModal(true)}
               onOpenShare={() => setShowShareModal(true)}
               onRemoveDocument={handleRemoveDocument}
@@ -985,14 +991,22 @@ function DashboardPage() {
             />
           )}
           <div className="flex-1 overflow-hidden">
-            <ChatArena
-              chatHistory={activeNotebook.chatHistory || []}
-              onSendMessage={handleSendMessage}
-              onRegenerate={(text, model, msgId) => handleRegenerate(activeNotebook.id, text, model, msgId)}
-              pinnedDocIds={pinnedDocIds}
-              onRenameNotebook={handleRenameNotebook}
-              isLoading={isLoadingNotebook}
-            />
+            {!appId && <AppSelector notebookId={activeNotebook.id} />}
+            {appId === 'chat' && (
+              <ChatArena
+                chatHistory={activeNotebook.chatHistory || []}
+                onSendMessage={handleSendMessage}
+                onRegenerate={(text, model, msgId) => handleRegenerate(activeNotebook.id, text, model, msgId)}
+                pinnedDocIds={pinnedDocIds}
+                onRenameNotebook={handleRenameNotebook}
+                isLoading={isLoadingNotebook}
+              />
+            )}
+            {appId !== 'chat' && appId && (
+              <div className="flex items-center justify-center h-full w-full text-[#c8cdc9]">
+                <p>The {appId} app is currently under construction.</p>
+              </div>
+            )}
           </div>
 
           {showUploadModal && (
