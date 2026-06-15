@@ -77,9 +77,10 @@ public class SharedNotebookService {
 				// Clone chunks
 				List<DocumentChunk> sourceChunks = documentChunkRepository.findByDocumentId(sourceDoc.getId());
 				for (DocumentChunk chunk : sourceChunks) {
+					float[] vector = chunk.getEmbedding() != null ? chunk.getEmbedding() : new float[768];
 					DocumentChunk newChunk = new DocumentChunk(
 						newDoc.getId(), cloned.getId(), chunk.getFileName(),
-						chunk.getChunkIndex(), chunk.getContent()
+						chunk.getChunkIndex(), chunk.getContent(), vector
 					);
 					documentChunkRepository.save(newChunk);
 				}

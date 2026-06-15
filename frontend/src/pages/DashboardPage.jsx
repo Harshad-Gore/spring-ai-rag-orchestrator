@@ -660,7 +660,8 @@ function DashboardPage() {
         })
 
         if (!response.ok) {
-          throw new Error(`Upload failed: ${response.statusText}`)
+          const errText = await response.text();
+          throw new Error(`Upload failed: ${response.statusText} - ${errText}`);
         }
 
         const returnedDocs = await response.json()

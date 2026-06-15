@@ -20,11 +20,10 @@ public interface DocumentChunkRepository extends JpaRepository<DocumentChunk, UU
 	@Query(value = """
 			SELECT * FROM document_chunks
 			WHERE notebook_id = :notebookId
-			AND to_tsvector('english', content) @@ plainto_tsquery('english', :query)
-			ORDER BY ts_rank(to_tsvector('english', content), plainto_tsquery('english', :query)) DESC
+			ORDER BY embedding <-> cast(:queryEmbedding as vector)
 			LIMIT 10
 			""", nativeQuery = true)
-	List<DocumentChunk> searchByNotebookAndQuery(
+	List<DocumentChunk> searchByNotebookAndVector(
 			@Param("notebookId") UUID notebookId,
-			@Param("query") String query);
+			@Param("queryEmbedding") String queryEmbedding);
 }

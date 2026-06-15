@@ -21,8 +21,9 @@ public class TextExtractorService {
 		String fileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "";
 		String ext = getExtension(fileName).toLowerCase();
 
+		String rawText;
 		try (InputStream is = file.getInputStream()) {
-			return switch (ext) {
+			rawText = switch (ext) {
 				case "pdf" -> extractPdf(is);
 				case "docx" -> extractDocx(is);
 				case "txt", "md", "csv" -> new String(is.readAllBytes(), StandardCharsets.UTF_8);
@@ -31,6 +32,9 @@ public class TextExtractorService {
 		} catch (IOException e) {
 			throw new RuntimeException("Failed to extract text from: " + fileName, e);
 		}
+		
+		// PostgreSQL does not support null characters (\u0000) in TEXT fields
+		return rawText != null ? rawText.replace("\u0000", "") : "";
 	}
 
 	public List<String> chunkText(String text, int maxWordsPerChunk) {

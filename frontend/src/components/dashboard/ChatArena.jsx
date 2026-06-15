@@ -92,7 +92,7 @@ const MD_COMPONENTS = {
 // ---------------------------------------------------------------------------
 // Single message bubble
 // ---------------------------------------------------------------------------
-const MessageBubble = memo(function MessageBubble({ variants, isStreaming, isThinking, fadeIn = false, fadeDelay = 0, isLatestAssistant, onRegenerate }) {
+const MessageBubble = memo(function MessageBubble({ variants, isStreaming, isThinking, fadeIn = false, fadeDelay = 0, isLatestAssistant, onRegenerate, userPrompt }) {
   const [variantIndex, setVariantIndex] = useState(variants ? variants.length - 1 : 0)
   
   useEffect(() => {
@@ -171,9 +171,9 @@ const MessageBubble = memo(function MessageBubble({ variants, isStreaming, isThi
               >
                 <Copy className="size-3.5" />
               </button>
-              {isLatestAssistant && onRegenerate && (
+              {isLatestAssistant && onRegenerate && userPrompt && (
                 <button
-                  onClick={onRegenerate}
+                  onClick={() => onRegenerate(userPrompt)}
                   className="p-1.5 text-[#657069] hover:text-[#58d68d] hover:bg-[#58d68d]/10 rounded-md transition-colors cursor-pointer"
                   title="Regenerate response"
                 >
@@ -396,6 +396,16 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
+  const handleRegenerate = useCallback(async (userPrompt) => {
+    if (!onRegenerate || !userPrompt) return
+    const msgId = `stream-${Date.now()}`
+    setStreamingMsgId(msgId)
+    setIsThinking(true)
+    setIsStreaming(true)
+    await onRegenerate(userPrompt, selectedModel, msgId)
+    setIsThinking(false)
+  }, [onRegenerate, selectedModel])
+
   const isEmpty = !chatHistory || chatHistory.length === 0
   const isBusy = isThinking || isStreaming
   const streamingMsg = streamingMsgId ? chatHistory.find(m => m.id === streamingMsgId) : null
@@ -507,18 +517,8 @@ function ChatArena({ chatHistory, onSendMessage, onRegenerate, pinnedDocIds, isL
                   fadeIn={isLast && initialHistoryLength.current > 0}
                   fadeDelay={0}
                   isLatestAssistant={isLast && group.role === 'assistant'}
-                  onRegenerate={async () => {
-                    const originalIndex = groupedHistory.findIndex(g => g.id === group.id)
-                    const lastUserGroup = groupedHistory[originalIndex - 1]
-                    if (onRegenerate && lastUserGroup?.role === 'user') {
-                      const msgId = `stream-${Date.now()}`
-                      setStreamingMsgId(msgId)
-                      setIsThinking(true)
-                      setIsStreaming(true)
-                      await onRegenerate(lastUserGroup.variants[0].content, selectedModel, msgId)
-                      setIsThinking(false)
-                    }
-                  }}
+                  onRegenerate={onRegenerate ? handleRegenerate : undefined}
+                  userPrompt={onRegenerate && group.role === 'assistant' ? groupedHistory[i - 1]?.variants[0]?.content : undefined}
                 />
               )
             })}

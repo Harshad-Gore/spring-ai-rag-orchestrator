@@ -6,6 +6,9 @@ import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.embedding.EmbeddingResponse;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -21,18 +24,21 @@ public class DocumentService {
 	private final StorageService storageService;
 	private final TextExtractorService textExtractor;
 	private final WebContentExtractor webContentExtractor;
+	private final EmbeddingModel embeddingModel;
 
 	public DocumentService(
 			DocumentRepository documentRepository,
 			DocumentChunkRepository chunkRepository,
 			StorageService storageService,
 			TextExtractorService textExtractor,
-			WebContentExtractor webContentExtractor) {
+			WebContentExtractor webContentExtractor,
+			@Qualifier("googleGenAiTextEmbedding") EmbeddingModel embeddingModel) {
 		this.documentRepository = documentRepository;
 		this.chunkRepository = chunkRepository;
 		this.storageService = storageService;
 		this.textExtractor = textExtractor;
 		this.webContentExtractor = webContentExtractor;
+		this.embeddingModel = embeddingModel;
 	}
 
 	@Transactional(readOnly = true)
@@ -74,14 +80,29 @@ public class DocumentService {
 			List<String> chunks = textExtractor.chunkText(text, MAX_WORDS_PER_CHUNK);
 			log.info("Created {} chunks from {}", chunks.size(), file.getOriginalFilename());
 
-			for (int i = 0; i < chunks.size(); i++) {
-				chunkRepository.save(new DocumentChunk(
-					doc.getId(), notebookId, file.getOriginalFilename(), i, chunks.get(i)));
+			// Batch embed in groups of 10 to avoid API payload limits
+			int batchSize = 10;
+			for (int i = 0; i < chunks.size(); i += batchSize) {
+				int end = Math.min(i + batchSize, chunks.size());
+				List<String> batch = chunks.subList(i, end);
+				EmbeddingResponse embeddingResponse = embeddingModel.embedForResponse(batch);
+				
+				for (int j = 0; j < batch.size(); j++) {
+					float[] vector = embeddingResponse.getResults().get(j).getOutput();
+					chunkRepository.save(new DocumentChunk(
+						doc.getId(), notebookId, file.getOriginalFilename(), i + j, batch.get(j), vector));
+				}
 			}
 
 			doc.setStatus(DocumentStatus.PROCESSED);
 			return documentRepository.save(doc);
 		} catch (Exception e) {
+			try {
+				java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter("upload_error.log", true));
+				pw.println("=== UPLOAD ERROR ===");
+				e.printStackTrace(pw);
+				pw.close();
+			} catch (Exception ex) {}
 			doc.setStatus(DocumentStatus.FAILED);
 			documentRepository.save(doc);
 			throw new RuntimeException("Failed to process: " + file.getOriginalFilename(), e);
@@ -107,9 +128,18 @@ public class DocumentService {
 			List<String> chunks = textExtractor.chunkText(content.text(), MAX_WORDS_PER_CHUNK);
 			log.info("Extracted {} chars, {} chunks from URL: {}", content.text().length(), chunks.size(), url);
 
-			for (int i = 0; i < chunks.size(); i++) {
-				chunkRepository.save(new DocumentChunk(
-					doc.getId(), notebookId, title, i, chunks.get(i)));
+			// Batch embed in groups of 10 to be ultra safe with API payload limits
+			int batchSize = 10;
+			for (int i = 0; i < chunks.size(); i += batchSize) {
+				int end = Math.min(i + batchSize, chunks.size());
+				List<String> batch = chunks.subList(i, end);
+				EmbeddingResponse embeddingResponse = embeddingModel.embedForResponse(batch);
+				
+				for (int j = 0; j < batch.size(); j++) {
+					float[] vector = embeddingResponse.getResults().get(j).getOutput();
+					chunkRepository.save(new DocumentChunk(
+						doc.getId(), notebookId, title, i + j, batch.get(j), vector));
+				}
 			}
 
 			doc.setStatus(DocumentStatus.PROCESSED);

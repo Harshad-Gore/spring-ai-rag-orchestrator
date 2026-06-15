@@ -36,18 +36,23 @@ public class DocumentChunk {
 	@Column(name = "content", nullable = false, columnDefinition = "TEXT")
 	private String content;
 
+	@org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VECTOR)
+	@Column(name = "embedding", columnDefinition = "vector(768)")
+	private float[] embedding;
+
 	@CreationTimestamp
 	@Column(name = "created_at", nullable = false, updatable = false)
 	private Instant createdAt;
 
 	protected DocumentChunk() {}
 
-	public DocumentChunk(UUID documentId, UUID notebookId, String fileName, int chunkIndex, String content) {
+	public DocumentChunk(UUID documentId, UUID notebookId, String fileName, int chunkIndex, String content, float[] embedding) {
 		this.documentId = documentId;
 		this.notebookId = notebookId;
 		this.fileName = fileName;
 		this.chunkIndex = chunkIndex;
 		this.content = content;
+		this.embedding = embedding;
 	}
 
 	public UUID getId() { return id; }
@@ -56,5 +61,6 @@ public class DocumentChunk {
 	public String getFileName() { return fileName; }
 	public int getChunkIndex() { return chunkIndex; }
 	public String getContent() { return content; }
+	public float[] getEmbedding() { return embedding; }
 	public Instant getCreatedAt() { return createdAt; }
 }

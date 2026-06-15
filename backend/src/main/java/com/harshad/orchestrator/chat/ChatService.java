@@ -20,6 +20,8 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
@@ -41,14 +43,17 @@ public class ChatService {
 	private final ChatClient chatClient;
 	private final DocumentChunkRepository chunkRepository;
 	private final ChatMessageRepository chatMessageRepository;
+	private final EmbeddingModel embeddingModel;
 
 	public ChatService(
 			ChatClient.Builder chatClientBuilder,
 			DocumentChunkRepository chunkRepository,
-			ChatMessageRepository chatMessageRepository) {
+			ChatMessageRepository chatMessageRepository,
+			@Qualifier("googleGenAiTextEmbedding") EmbeddingModel embeddingModel) {
 		this.chatClient = chatClientBuilder.build();
 		this.chunkRepository = chunkRepository;
 		this.chatMessageRepository = chatMessageRepository;
+		this.embeddingModel = embeddingModel;
 	}
 
 	// ── Internal Types ───────────────────────────────────────────────────────
@@ -278,8 +283,12 @@ public class ChatService {
 
 		boolean hasPinFilter = pinnedDocIds != null && !pinnedDocIds.isEmpty();
 
-		// Full-text search, then filter to pinned docs
-		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndQuery(notebookId, analysis.standaloneQuery())
+		// 3. Generate embedding for query and perform vector search
+		float[] queryEmbedding = embeddingModel.embed(analysis.standaloneQuery());
+		String embeddingString = java.util.Arrays.toString(queryEmbedding);
+		
+		List<DocumentChunk> chunks = chunkRepository.searchByNotebookAndVector(
+				notebookId, embeddingString)
 				.stream()
 				.filter(c -> !hasPinFilter || pinnedDocIds.contains(c.getDocumentId()))
 				.toList();
