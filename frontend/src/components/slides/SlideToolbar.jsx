@@ -152,7 +152,8 @@ export default function SlideToolbar({
             <div className="w-3 h-3 rounded-full border border-[#333]" style={{ background: `#${THEMES[themeKey]?.accent || 'eccb45'}` }} />
             <span className="hidden sm:inline">{THEMES[themeKey]?.label || 'Theme'}</span>
           </button>
-          <div className="absolute left-0 top-full mt-1 w-36 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.8)] py-1 z-50 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity">
+          {/* The before:* classes create an invisible bridge so the mouse doesn't fall into a gap and lose hover */}
+          <div className="absolute left-0 top-full mt-1 w-36 bg-[#1a1a1a] border border-[#333] rounded-lg shadow-[0_8px_32px_rgba(0,0,0,0.8)] py-1 z-50 opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-opacity before:absolute before:-top-2 before:left-0 before:w-full before:h-2 before:content-['']">
             {Object.entries(THEMES).map(([key, t]) => (
               <button
                 key={key}
