@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import {
   Type, Square, Circle, Minus, ImagePlus, Undo2, Redo2,
   Download, Sparkles, ZoomIn, ZoomOut, ArrowUpToLine, ArrowDownToLine,
-  Bold, Italic, AlignLeft, AlignCenter, AlignRight, Trash2, Palette, Loader2,
+  Bold, Italic, AlignLeft, AlignCenter, AlignRight, Trash2, Palette, Loader2, FileJson,
 } from 'lucide-react'
 import { THEMES } from '../../lib/slideThemes.js'
 import {
@@ -27,6 +27,7 @@ export default function SlideToolbar({
   onRedo,
   onExport,
   onGenerate,
+  onOpenImport,
 }) {
   const fileInputRef = useRef(null)
   const colorInputRef = useRef(null)
@@ -197,14 +198,22 @@ export default function SlideToolbar({
         <button
           onClick={onGenerate}
           disabled={isGenerating}
-          className="mr-2 flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded bg-[#1a1a1a] border border-[#333] text-[#58d68d] hover:bg-[#242424] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded bg-[#1a1a1a] border border-[#333] text-[#58d68d] hover:bg-[#242424] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
           AI Generate
         </button>
         <button
+          onClick={onOpenImport}
+          className="mx-2 flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded border border-[#333] bg-[#1a1a1a] text-[#a2a8a5] hover:bg-[#242424] hover:text-white transition-colors"
+          title="Import JSON"
+        >
+          <FileJson className="w-3 h-3" />
+          Import
+        </button>
+        <button
           onClick={onExport}
-          className="mr-2 flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded bg-[#eccb45] text-black hover:bg-[#d4b53b] transition-colors"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium rounded bg-[#eccb45] text-black hover:bg-[#d4b53b] transition-colors"
         >
           <Download className="w-3 h-3" />
           Export

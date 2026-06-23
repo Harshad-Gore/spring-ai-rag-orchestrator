@@ -187,6 +187,11 @@ function reducer(state, action) {
       )
       return { ...state, slides, history }
     }
+    case 'UPDATE_ALL_SLIDES_BG': {
+      const history = pushHistory(state)
+      const slides = state.slides.map(s => ({ ...s, backgroundColor: action.payload }))
+      return { ...state, slides, history }
+    }
     case 'UPDATE_SLIDE_TITLE': {
       const slides = state.slides.map(s =>
         s.id === action.payload.id ? { ...s, title: action.payload.title } : s
@@ -338,6 +343,7 @@ function reducer(state, action) {
 
 // ─── Hook ─────────────────────────────────────────────────────────
 export function useSlideEditor() {
+  // Force Vite HMR reload
   const [state, dispatch] = useReducer(reducer, initialState)
 
   const activeSlide = state.slides.find(s => s.id === state.activeSlideId) || null
@@ -353,6 +359,7 @@ export function useSlideEditor() {
   const setActiveSlide = useCallback((id) => dispatch({ type: 'SET_ACTIVE_SLIDE', payload: id }), [])
   const reorderSlides = useCallback((slides) => dispatch({ type: 'REORDER_SLIDES', payload: slides }), [])
   const updateSlideBg = useCallback((color) => dispatch({ type: 'UPDATE_SLIDE_BG', payload: color }), [])
+  const updateAllSlidesBg = useCallback((color) => dispatch({ type: 'UPDATE_ALL_SLIDES_BG', payload: color }), [])
   const updateSlideTitle = useCallback((id, title) => dispatch({ type: 'UPDATE_SLIDE_TITLE', payload: { id, title } }), [])
 
   const addElement = useCallback((element) => dispatch({ type: 'ADD_ELEMENT', payload: element }), [])
@@ -383,6 +390,7 @@ export function useSlideEditor() {
     setActiveSlide,
     reorderSlides,
     updateSlideBg,
+    updateAllSlidesBg,
     updateSlideTitle,
     addElement,
     updateElement,

@@ -1,28 +1,34 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Sparkles, LayoutTemplate, Loader2, Presentation } from 'lucide-react'
 import { getStoredAuthToken } from '../../services/authApi.js'
-import { useSlideEditor, uid, createTextElement, createSlide } from '../../hooks/useSlideEditor.js'
+import {
+  useSlideEditor, uid, createSlide,
+  createTextElement, createRectElement, createCircleElement, createImageElement, createLineElement
+} from '../../hooks/useSlideEditor.js'
 import { getTheme } from '../../lib/slideThemes.js'
 import { exportSlidesToPPTX } from '../../lib/pptxExport.js'
 import SlideEditorCanvas from '../slides/SlideEditorCanvas.jsx'
 import SlideToolbar from '../slides/SlideToolbar.jsx'
 import SlideThumbnailPanel from '../slides/SlideThumbnailPanel.jsx'
 import PropertiesPanel from '../slides/PropertiesPanel.jsx'
+import SlideImportModal from '../slides/SlideImportModal.jsx'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080').replace(/\/+$/, '')
 
 export default function SlidesArena({ notebookId, pinnedDocIds }) {
+  // Force Vite HMR reload
   const editor = useSlideEditor()
   const {
     state, activeSlide, selectedElement, canUndo, canRedo,
     addSlide, deleteSlide, duplicateSlide, setActiveSlide, reorderSlides,
-    updateSlideBg, updateSlideTitle, addElement, updateElement, deleteElement,
+    updateSlideBg, updateAllSlidesBg, updateSlideTitle, addElement, updateElement, deleteElement,
     selectElement, bringToFront, sendToBack, setTheme, setZoom,
     loadAiSlides, startBlank, undo, redo,
   } = editor
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [showImportModal, setShowImportModal] = useState(false)
 
   // ─── Keyboard shortcuts (Ctrl+Z / Ctrl+Y) ─────────────────────
   useEffect(() => {
@@ -199,6 +205,45 @@ export default function SlidesArena({ notebookId, pinnedDocIds }) {
     }
   }, [state.slides, state.themeKey])
 
+  // ─── Import JSON ───────────────────────────────────────────────
+  const handleImportJSON = useCallback((parsedJson) => {
+    try {
+      const theme = getTheme(state.themeKey)
+      const newSlides = parsedJson.map((s, idx) => {
+        const elements = []
+        if (Array.isArray(s.elements)) {
+          for (const el of s.elements) {
+            // Apply theme defaults where applicable, then spread imported properties
+            if (el.type === 'text') {
+              elements.push(createTextElement({ fill: theme.body, ...el }))
+            } else if (el.type === 'rect') {
+              elements.push(createRectElement(el))
+            } else if (el.type === 'circle') {
+              elements.push(createCircleElement(el))
+            } else if (el.type === 'image') {
+              elements.push(createImageElement(el.src || '', el))
+            } else if (el.type === 'line') {
+              elements.push(createLineElement(el))
+            } else {
+              elements.push({ id: uid(el.type || 'el'), ...el })
+            }
+          }
+        }
+        return createSlide({
+          title: `Imported Slide ${idx + 1}`,
+          ...s, // Spread all slide-level attributes (e.g. backgroundColor, transition)
+          elements, // Use our parsed elements array
+        })
+      })
+
+      loadAiSlides(newSlides)
+      setShowImportModal(false)
+    } catch (err) {
+      console.error(err)
+      setError('Import failed: ' + err.message)
+    }
+  }, [state.themeKey, loadAiSlides])
+
   // ─── Render: Start screen ─────────────────────────────────────
   if (!state.hasStarted) {
     return (
@@ -270,6 +315,7 @@ export default function SlidesArena({ notebookId, pinnedDocIds }) {
 
       {/* Toolbar */}
       <SlideToolbar
+        activeSlide={activeSlide}
         selectedElement={selectedElement}
         themeKey={state.themeKey}
         zoom={state.zoom}
@@ -285,8 +331,9 @@ export default function SlidesArena({ notebookId, pinnedDocIds }) {
         onSetZoom={setZoom}
         onUndo={undo}
         onRedo={redo}
-        onExport={handleExport}
         onGenerate={handleGenerate}
+        onExport={handleExport}
+        onOpenImport={() => setShowImportModal(true)}
       />
 
       {/* Three-panel layout */}
@@ -322,9 +369,17 @@ export default function SlidesArena({ notebookId, pinnedDocIds }) {
           themeKey={state.themeKey}
           onUpdateElement={updateElement}
           onUpdateSlideBg={updateSlideBg}
+          onUpdateAllSlidesBg={updateAllSlidesBg}
           onUpdateSlideTitle={updateSlideTitle}
         />
       </div>
+
+      {showImportModal && (
+        <SlideImportModal
+          onClose={() => setShowImportModal(false)}
+          onImport={handleImportJSON}
+        />
+      )}
     </div>
   )
 }
