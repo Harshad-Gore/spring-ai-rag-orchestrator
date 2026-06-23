@@ -34,12 +34,39 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
   pptx.defineLayout({ name: 'CANVAS_16_9', width: PPTX_W, height: PPTX_H });
   pptx.layout = 'CANVAS_16_9';
 
+  // ─── 1. Define the Premium Master Slide ──────────────────────
+  const accentColor = theme?.accent || 'eccb45';
+  const bgColor = theme?.bg || '0f0f0f';
+  const bodyColor = theme?.body || 'c8cdc9';
+
+  pptx.defineSlideMaster({
+    title: 'THEME_MASTER',
+    background: { color: bgColor },
+    objects: [
+      // Top subtle accent bar
+      { rect: { x: 0, y: 0, w: '100%', h: 0.05, fill: { color: accentColor } } },
+      // Footer geometric bar
+      { rect: { x: 0, y: PPTX_H - 0.25, w: '100%', h: 0.25, fill: { color: '111111' } } },
+      // Slide number text label
+      { 
+        text: { 
+          text: 'Slide', 
+          options: { x: PPTX_W - 1.2, y: PPTX_H - 0.22, w: 1.0, h: 0.2, fontSize: 9, color: bodyColor, align: 'right' } 
+        } 
+      }
+    ],
+    // The actual slide number placeholder
+    slideNumber: { x: PPTX_W - 0.35, y: PPTX_H - 0.22, fontSize: 9, color: accentColor, align: 'left' }
+  });
+
+  // ─── 2. Build Slides ─────────────────────────────────────────
   for (const slideData of slides) {
-    const slide = pptx.addSlide();
+    const slide = pptx.addSlide({ masterName: 'THEME_MASTER' });
     
-    // Background
-    const bgColor = slideData.backgroundColor || theme?.bg || '0f0f0f';
-    slide.background = { color: bgColor };
+    // If user set a custom background for THIS specific slide, override the master
+    if (slideData.backgroundColor && slideData.backgroundColor !== bgColor) {
+      slide.background = { color: slideData.backgroundColor };
+    }
 
     for (const el of slideData.elements) {
       const x = toInches(el.x || 0);
@@ -47,6 +74,9 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
       const w = toInches(el.width || 100);
       const h = toInches(el.height || 50);
       const rotate = el.rotation || 0;
+
+      // Premium outer drop shadow for shapes/images
+      const shadowProps = { type: 'outer', color: '000000', blur: 6, offset: 3, angle: 45, opacity: 0.4 };
 
       switch (el.type) {
         case 'text': {
@@ -58,13 +88,15 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
             rotate,
             fontSize: Math.round((el.fontSize || 20) * 0.75), // px to pt approximation
             fontFace: (el.fontFamily || 'Inter, sans-serif').split(',')[0].trim(),
-            color: el.fill || theme?.body || 'c8cdc9',
+            color: el.fill || bodyColor,
             bold: (el.fontStyle || '').includes('bold'),
             italic: (el.fontStyle || '').includes('italic'),
             align: el.textAlign || 'left',
             valign: 'top',
             transparency: Math.round((1 - (el.opacity ?? 1)) * 100),
             wrap: true,
+            // Subtle text shadow for high contrast on dark themes
+            shadow: { type: 'outer', color: '000000', blur: 2, offset: 1, angle: 45, opacity: 0.5 }
           });
           break;
         }
@@ -80,6 +112,7 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
             line: el.stroke ? { color: el.stroke, width: el.strokeWidth || 1 } : undefined,
             rectRadius: el.cornerRadius ? toInches(el.cornerRadius) : undefined,
             transparency: Math.round((1 - (el.opacity ?? 1)) * 100),
+            shadow: shadowProps
           });
           break;
         }
@@ -94,6 +127,7 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
             fill: { color: el.fill || '333333' },
             line: el.stroke ? { color: el.stroke, width: el.strokeWidth || 1 } : undefined,
             transparency: Math.round((1 - (el.opacity ?? 1)) * 100),
+            shadow: shadowProps
           });
           break;
         }
@@ -121,6 +155,7 @@ export async function exportSlidesToPPTX(slides, theme, fileName = 'Presentation
               h,
               rotate,
               transparency: Math.round((1 - (el.opacity ?? 1)) * 100),
+              shadow: shadowProps
             });
           }
           break;
