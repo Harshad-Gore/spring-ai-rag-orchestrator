@@ -8,6 +8,7 @@ import FolderTreeSidebar from '../components/dashboard/FolderTreeSidebar.jsx'
 import DocumentSidebar from '../components/dashboard/DocumentSidebar.jsx'
 import ChatArena from '../components/dashboard/ChatArena.jsx'
 import AppSelector from '../components/dashboard/AppSelector.jsx'
+import SlidesArena from '../components/dashboard/SlidesArena.jsx'
 import UploadModal from '../components/dashboard/UploadModal.jsx'
 import ShareModal from '../components/dashboard/ShareModal.jsx'
 import { ConfirmationDialog } from '../components/ui/confirmation-dialog.jsx'
@@ -956,6 +957,7 @@ function DashboardPage() {
         onLogout={handleLogout}
         isCreatingNotebook={isCreatingNotebook}
         isLoading={isLoadingNotebook}
+        isExplorerView={!activeNotebook}
       />
 
       {activeNotebook ? (
@@ -1002,7 +1004,13 @@ function DashboardPage() {
                 isLoading={isLoadingNotebook}
               />
             )}
-            {appId !== 'chat' && appId && (
+            {appId === 'slides' && (
+              <SlidesArena
+                notebookId={activeNotebook.id}
+                pinnedDocIds={pinnedDocIds}
+              />
+            )}
+            {appId !== 'chat' && appId !== 'slides' && appId && (
               <div className="flex items-center justify-center h-full w-full text-[#c8cdc9]">
                 <p>The {appId} app is currently under construction.</p>
               </div>

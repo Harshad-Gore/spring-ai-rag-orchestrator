@@ -149,6 +149,71 @@ public class ChatService {
 		return new StreamContext(tokenStream, citations);
 	}
 
+	public StreamContext prepareSlideStream(UUID notebookId, String modelOverride, List<UUID> pinnedDocIds) {
+		boolean hasPinFilter = pinnedDocIds != null && !pinnedDocIds.isEmpty();
+		List<DocumentChunk> chunks = hasPinFilter 
+				? chunkRepository.findByDocumentIdIn(pinnedDocIds)
+				: chunkRepository.findByNotebookId(notebookId);
+
+		// Limit to top 20 chunks to prevent rate limiting while retaining core context
+		if (chunks.size() > 20) {
+			chunks = chunks.subList(0, 20);
+		}
+
+		String context = chunks.stream()
+			.map(c -> "[Source: " + c.getFileName() + " | Chunk " + c.getChunkIndex() + "]\n" + c.getContent())
+			.collect(Collectors.joining("\n\n---\n\n"));
+
+		String promptText = """
+			You are an expert presentation content generator. Based on the uploaded documents, generate a structured presentation.
+			You MUST respond ONLY with a valid JSON array of slide objects. No markdown, no code blocks, just raw JSON.
+
+			The canvas is 960px wide and 540px tall. All coordinates are absolute pixel values in this space.
+			Each slide has a "title" (string) and "elements" (array of text objects).
+
+			JSON Schema per slide:
+			{
+			  "title": "Slide Title",
+			  "elements": [
+			    {
+			      "type": "text",
+			      "text": "Content text here. Use actual newline characters for bullet points.",
+			      "x": 50,
+			      "y": 100,
+			      "width": 860,
+			      "height": 80,
+			      "fontSize": 18,
+			      "fontStyle": "",
+			      "fill": "c8cdc9",
+			      "textAlign": "left"
+			    }
+			  ]
+			}
+
+			Rules:
+			1. Generate 5-8 slides to cover the content thoroughly.
+			2. Do NOT cram too much text into one slide. Split content across multiple slides.
+			3. Each slide should have 2-4 text elements maximum.
+			4. The title is rendered separately, so do NOT include it in elements.
+			5. Use bullet points (• prefix) in text for lists.
+			6. Keep fontSize between 14-24 for body text. Use 18 as default.
+			7. Position elements so they don't overlap: start body text at y=100, space elements with ~10px gaps.
+			8. For emphasis, set fontStyle to "bold".
+			9. Keep each text block concise. Maximum 4-5 lines per text element.
+			10. Use the full width (x=50, width=860) for most text.
+
+			===== DOCUMENT CONTEXT =====
+			%s
+			===== END CONTEXT =====
+			""".formatted(context);
+
+		List<Message> springMessages = List.of(new UserMessage(promptText));
+		ChatClient.ChatClientRequestSpec spec = buildSpec(springMessages, modelOverride);
+
+		Flux<String> tokenStream = spec.stream().content();
+		return new StreamContext(tokenStream, buildCitations(chunks));
+	}
+
 	// ── Helpers ──────────────────────────────────────────────────────────────
 
 	private ChatClient.ChatClientRequestSpec buildSpec(List<Message> messages, String modelOverride) {

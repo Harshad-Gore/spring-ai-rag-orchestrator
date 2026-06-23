@@ -20,8 +20,8 @@ function AppSelector({ notebookId }) {
       description: 'Generate presentations directly from your notes.',
       icon: Presentation,
       color: 'text-[#eccb45]',
-      available: false,
-      onClick: () => {}
+      available: true,
+      onClick: () => navigate(`/notebook/slides/${notebookId}`)
     },
     {
       id: 'docs',

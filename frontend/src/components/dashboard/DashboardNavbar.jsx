@@ -25,6 +25,7 @@ function DashboardNavbar({
   searchValue,
   isSettingsPage = false,
   isSharedView = false,
+  isExplorerView = true,
   ownerEmail = null,
   isLoading = false,
 }) {
@@ -107,7 +108,11 @@ function DashboardNavbar({
               <span className="font-semibold text-white">Shared Notebook</span>
               <span className="text-xs text-[#657069]">from {ownerEmail || 'Unknown User'}</span>
             </div>
-          ) : !isSettingsPage ? (
+          ) : isSettingsPage ? (
+            <div className="flex items-center justify-center text-sm font-medium text-[#c8cdc9]">
+              Settings
+            </div>
+          ) : isExplorerView ? (
             <div className="mx-auto max-w-sm">
               <Input
                 type="search"
@@ -119,11 +124,7 @@ function DashboardNavbar({
                 className="h-9 text-xs"
               />
             </div>
-          ) : (
-            <div className="flex items-center justify-center text-sm font-medium text-[#c8cdc9]">
-              Settings
-            </div>
-          )}
+          ) : null}
         </div>
 
         {/* Right: create + profile */}
@@ -183,7 +184,7 @@ function DashboardNavbar({
       {mobileOpen && (
         <div className="border-t border-[#242424] bg-[#090909] px-4 py-3 md:hidden">
           <div className="grid w-full gap-3">
-            {!isSharedView && !isSettingsPage && (
+            {isExplorerView && !isSharedView && !isSettingsPage && (
               <Input
                 type="search"
                 value={searchValue}

@@ -109,6 +109,52 @@ public class ChatController {
 		}
 	}
 
+	@PostMapping(value = "/stream-slides", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	public Flux<ServerSentEvent<String>> streamSlides(@RequestBody ChatRequest request) {
+		try {
+			List<UUID> pinned = parsePinned(request.pinnedDocIds());
+			StreamContext ctx = chatService.prepareSlideStream(
+				request.notebookId() != null ? UUID.fromString(request.notebookId()) : null, 
+				request.model(), 
+				pinned
+			);
+
+			Flux<ServerSentEvent<String>> tokenEvents = ctx.tokenStream()
+				.map(token -> {
+					try {
+						return ServerSentEvent.<String>builder()
+							.event("token")
+							.data(objectMapper.writeValueAsString(token))
+							.build();
+					} catch (Exception e) {
+						return ServerSentEvent.<String>builder().event("token").data("\"\"").build();
+					}
+				});
+
+			String citationsJson = serializeCitations(ctx.citations());
+			Flux<ServerSentEvent<String>> tail = Flux.just(
+				ServerSentEvent.<String>builder().event("citations").data(citationsJson).build(),
+				ServerSentEvent.<String>builder().event("done").data("").build()
+			);
+
+			return Flux.concat(tokenEvents, tail)
+				.onErrorResume(ex -> {
+					log.error("Stream error: {}", ex.getMessage(), ex);
+					return Flux.just(ServerSentEvent.<String>builder()
+						.event("error")
+						.data("Stream error: " + ex.getMessage())
+						.build());
+				});
+
+		} catch (Exception ex) {
+			log.error("Failed to start slide stream: {}", ex.getMessage(), ex);
+			return Flux.just(ServerSentEvent.<String>builder()
+				.event("error")
+				.data("Failed to start stream: " + ex.getMessage())
+				.build());
+		}
+	}
+
 	@PostMapping(value = "/regenerate", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
 	public Flux<ServerSentEvent<String>> regenerate(@RequestBody ChatRequest request) {
 		try {
