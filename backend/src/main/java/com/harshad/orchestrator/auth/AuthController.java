@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 @RestController
@@ -30,16 +31,16 @@ public class AuthController {
 	}
 
 	@PostMapping("/signup")
-	public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request) {
-		AuthResponse response = authService.signup(request);
+	public ResponseEntity<AuthResponse> signup(@Valid @RequestBody SignupRequest request, HttpServletRequest httpRequest) {
+		AuthResponse response = authService.signup(request, getClientOrigin(httpRequest));
 		return ResponseEntity.status(HttpStatus.CREATED)
 			.header(HttpHeaders.SET_COOKIE, createAuthCookie(response).toString())
 			.body(response);
 	}
 
 	@PostMapping("/login")
-	public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
-		AuthResponse response = authService.login(request);
+	public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+		AuthResponse response = authService.login(request, getClientOrigin(httpRequest));
 		return ResponseEntity.ok()
 			.header(HttpHeaders.SET_COOKIE, createAuthCookie(response).toString())
 			.body(response);
@@ -69,6 +70,39 @@ public class AuthController {
 		return ResponseEntity.noContent()
 			.header(HttpHeaders.SET_COOKIE, clearAuthCookie().toString())
 			.build();
+	}
+
+	@PostMapping("/verify-email")
+	public ResponseEntity<Void> verifyEmail(@RequestBody TokenRequest request, HttpServletRequest httpRequest) {
+		authService.verifyEmail(request.token(), getClientOrigin(httpRequest));
+		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/forgot-password")
+	public ResponseEntity<Void> forgotPassword(@RequestBody EmailRequest request, HttpServletRequest httpRequest) {
+		authService.forgotPassword(request.email(), getClientOrigin(httpRequest));
+		return ResponseEntity.ok().build();
+	}
+
+	@PostMapping("/reset-password")
+	public ResponseEntity<Void> resetPassword(@RequestBody ResetPasswordRequest request) {
+		authService.resetPassword(request.token(), request.password());
+		return ResponseEntity.ok().build();
+	}
+
+	public record TokenRequest(String token) {}
+	public record EmailRequest(String email) {}
+	public record ResetPasswordRequest(String token, String password) {}
+
+	private String getClientOrigin(HttpServletRequest request) {
+		String origin = request.getHeader("Origin");
+		if (origin == null || origin.isBlank()) {
+			origin = request.getHeader("Referer");
+		}
+		if (origin != null && origin.endsWith("/")) {
+			origin = origin.substring(0, origin.length() - 1);
+		}
+		return origin;
 	}
 
 	private ResponseCookie createAuthCookie(AuthResponse response) {
