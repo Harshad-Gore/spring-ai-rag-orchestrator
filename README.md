@@ -6,6 +6,19 @@ The Spring AI RAG Orchestrator is a full-stack, robust platform designed to faci
 
 Users can create separate "Notebooks", upload multiple source documents (PDF, DOCX, TXT) into them, and interact with an AI assistant that strictly grounds its answers based on the uploaded contextual data.
 
+## Engineering Evidence
+
+[![Flagship verification](https://github.com/Harshad-Gore/Harshad-Gore/actions/workflows/verify-flagships.yml/badge.svg)](https://github.com/Harshad-Gore/Harshad-Gore/actions/workflows/verify-flagships.yml)
+
+| Gate | Current baseline |
+|---|---:|
+| Spring backend suite | 11 tests, 0 failures, 1 deterministic skip |
+| React production build | Passing |
+| Authentication coverage | Signup, verification state, login, session, duplicate-account and CORS behavior |
+| Migration coverage | Flyway initialization verified against an H2 PostgreSQL-compatible fixture |
+
+The automated suite excludes public-web extraction because third-party availability is nondeterministic. See the [architecture and evidence case study](https://github.com/Harshad-Gore/Harshad-Gore/blob/main/docs/spring-ai-rag-orchestrator.md) for trust boundaries, engineering decisions, and the openly tracked quality backlog.
+
 ## Features
 
 - **Notebook Workspaces:** Organize your data into isolated notebooks. Chat interactions are scoped strictly to the documents within the active notebook.

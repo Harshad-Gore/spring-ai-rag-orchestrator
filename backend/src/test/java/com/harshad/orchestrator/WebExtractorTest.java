@@ -1,9 +1,11 @@
 package com.harshad.orchestrator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Disabled;
 import com.harshad.orchestrator.document.WebContentExtractor;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
+@Disabled("Manual network smoke test; excluded from deterministic CI")
 public class WebExtractorTest {
     @Test
     public void testGFG() {
