@@ -1,6 +1,5 @@
 package com.harshad.orchestrator;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.blankOrNullString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -20,12 +19,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-
-import com.harshad.orchestrator.auth.EmailService;
-import com.harshad.orchestrator.auth.UserAccount;
-import com.harshad.orchestrator.auth.UserAccountRepository;
-import com.harshad.orchestrator.auth.UserStatus;
 
 import jakarta.servlet.http.Cookie;
 import tools.jackson.core.type.TypeReference;
@@ -53,16 +46,10 @@ class AuthControllerTests {
 	@Autowired
 	private MockMvc mockMvc;
 
-	@Autowired
-	private UserAccountRepository userAccountRepository;
-
-	@MockitoBean
-	private EmailService emailService;
-
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Test
-	void signupCreatesUnverifiedAccountAndRequiresEmailVerification() throws Exception {
+	void signupReturnsTokenAndAuthenticatedUser() throws Exception {
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(Map.of(
@@ -70,11 +57,14 @@ class AuthControllerTests {
 					"email", "avery@example.com",
 					"password", "password123"
 				))))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.message").value("UNVERIFIED_ACCOUNT"));
-
-		UserAccount account = userAccountRepository.findByEmailIgnoreCase("avery@example.com").orElseThrow();
-		assertThat(account.getStatus()).isEqualTo(UserStatus.UNVERIFIED);
+			.andExpect(status().isCreated())
+			.andExpect((result) -> org.assertj.core.api.Assertions.assertThat(
+				result.getResponse().getHeader(HttpHeaders.SET_COOKIE)
+			).contains("HttpOnly"))
+			.andExpect(jsonPath("$.tokenType").value("Bearer"))
+			.andExpect(jsonPath("$.accessToken", not(blankOrNullString())))
+			.andExpect(jsonPath("$.user.email").value("avery@example.com"))
+			.andExpect(jsonPath("$.user.role").value("USER"));
 	}
 
 	@Test
@@ -121,10 +111,7 @@ class AuthControllerTests {
 					"email", "morgan@example.com",
 					"password", "password123"
 				))))
-			.andExpect(status().isForbidden())
-			.andExpect(jsonPath("$.message").value("UNVERIFIED_ACCOUNT"));
-
-		activateAccount("morgan@example.com");
+			.andExpect(status().isCreated());
 
 		MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
 				.contentType(MediaType.APPLICATION_JSON)
@@ -164,18 +151,12 @@ class AuthControllerTests {
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(payload)))
-			.andExpect(status().isForbidden());
+			.andExpect(status().isCreated());
 
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(objectMapper.writeValueAsString(payload)))
 			.andExpect(status().isConflict())
 			.andExpect(jsonPath("$.fields.email").value("An account with this email already exists."));
-	}
-
-	private void activateAccount(String email) {
-		UserAccount account = userAccountRepository.findByEmailIgnoreCase(email).orElseThrow();
-		account.setStatus(UserStatus.ACTIVE);
-		userAccountRepository.save(account);
 	}
 }
