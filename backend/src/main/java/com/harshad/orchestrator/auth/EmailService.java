@@ -133,7 +133,7 @@ public class EmailService {
 
 			String jsonBody = String.format(
 				"{\"from\":\"%s\",\"to\":[\"%s\"],\"subject\":\"%s\",\"html\":\"%s\"}",
-				"Notebook <noreply@raybyte.me>", to, subject, escapedHtml
+				"Notebook <hello@raybyte.me>", to, subject, escapedHtml
 			);
 
 			HttpClient client = HttpClient.newHttpClient();
